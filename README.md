@@ -1,108 +1,309 @@
-![OpenWrt logo](include/logo.png)
+# OpenWRT для Promwad Thin Client (Depo Sky A60 / AK-Systems AK1100) + новый u-boot.
+Использует официальные репозитории (таргет kirkwood), kmod пакеты работают.
+RAM видна вся.
 
-OpenWrt Project is a Linux operating system targeting embedded devices. Instead
-of trying to create a single, static firmware, OpenWrt provides a fully
-writable filesystem with package management. This frees you from the
-application selection and configuration provided by the vendor and allows you
-to customize the device through the use of packages to suit any application.
-For developers, OpenWrt is the framework to build an application without having
-to build a complete firmware around it; for users this means the ability for
-full customization, to use the device in ways never envisioned.
+Работает:
+- Сетевые
+- MiniPCI-e порт
+- USB порты
+- Видео
+- Аудио
+- RTC
 
-Sunshine!
+Также в u-boot работает:
+- Сеть
+- USB
+- Видео (+клавиатура)
 
-## Download
+Другие плюсы этой сборки:
+- Билдится мощностями самого github
+- Ядро помещено в ubi (отпала нужна в сборках для девайсов с плохими блоками в области раздела ядра)
 
-Built firmware images are available for many architectures and come with a
-package selection to be used as WiFi home router. To quickly find a factory
-image usable to migrate from a vendor stock firmware to OpenWrt, try the
-*Firmware Selector*.
+Особенности сборки:
+1) В openwrt ядре для kirkwood выключены FB, VT и DRM, поэтому fbcon нормальной консоли - нет. Конфиг ядра менять нельзя (во избежании поломки kmod с реп), так что драйвер видео собран модулем (на манер simple-fb, юзает настроенное видео от u-boot). Консоль на экране - kmscon (программа в userspace, запускается последним сервисом). Поэтому на мониторе после Starting Kernel не виден лог ядра, и ожидание появления консоли ОС составляет пару минут.
+2) В OpenWrt нет udev, поэтому подключённую клавиатуру kmscon видит через самодельную пересылку событий. 
+3) Из 1 ГБ ОЗУ видно 944 МБ. HIGHMEM в ядре нет (конфиг не трогаем), без него ядро видит только ту память, что помещается в его адресное окно рядом с областью vmalloc. Поэтому vmalloc урезан до 64 МиБ (иначе ОЗУ было бы 768 МБ).
+4) Звук появился в более позднем ядре, так что на текущее был бекпортирован. 
+5) Драйвер хаба модицифирован для обхода ошибки в страпах хаба на плате.
 
-* [OpenWrt Firmware Selector](https://firmware-selector.openwrt.org/)
 
-If your device is supported, please follow the **Info** link to see install
-instructions or consult the support resources listed below.
 
-## 
 
-An advanced user may require additional or specific package. (Toolchain, SDK, ...) For everything else than simple firmware download, try the wiki download page:
+## Прошивка
 
-* [OpenWrt Wiki Download](https://openwrt.org/downloads)
 
-## Development
+### Если шьете сборку c githib впервые, и сейчас у вас стоит старая OpenWRT сборка
+(переход только с потерей данных)
 
-To build your own firmware you need a GNU/Linux, BSD or macOS system (case
-sensitive filesystem required). Cygwin is unsupported because of the lack of a
-case sensitive file system.
+0) Запомните MACи сетевых (если критично)
 
-### Requirements
+1) Закиньте в /tmp тонкого
+u-boot-wtplug_tc.kwb
+(например через scp -O / WinSCP или wget/curl)
 
-You need the following tools to compile OpenWrt, the package names vary between
-distributions. A complete list with distribution specific packages is found in
-the [Build System Setup](https://openwrt.org/docs/guide-developer/build-system/install-buildsystem)
-documentation.
+2) Запишите u-boot-wtplug_tc.kwb в раздел u-boot
+   ```
+   mtd write /tmp/u-boot-wtplug_tc.kwb u-boot
+   ```
 
+3) Ребутнитесь
+   ```
+   reboot
+   ```
+
+4) Продолжайте с пункта 5 "Восстанавливаем MACи" следующего раздела (потребуется serial кабель, или монитор с клавиатурой)
+
+
+
+
+
+
+### Если шьете сборку с githib впервые, не важно что стоит сейчас
+(потребуется serial кабель)
+
+0) Запомните MACи сетевых (если критично)
+
+1) Берем serial кабель и комп на linux (я использую debian 13, можете также юзать в виртуалке или загружаться в него с флешки), и ставим пакет
+   ```
+   apt install u-boot-tools
+   ```
+
+2) Запускаем загрузку u-boot по serial
+   ```
+   kwboot -t -b u-boot-wtplug_tc.kwb -B 115200 /dev/ttyUSB0
+   ```
+   и через пару секунд подаем питание на тонкий клиент - начнется передача u-boot.
+   Оказавшись в u-boot прерываем загрузку.
+
+3) Пункт разделяется на два в зависимости от источника файлов прошивки - tftp (крайний сетевой порт) или usb флешка (mbr, один раздел, fat32)
+
+3a) Tftp - назначьте тонкому ip из своей подсети, укажите адрес tftp сервера с файлами, и загрузите с него u-boot 
 ```
-binutils bzip2 diff find flex gawk gcc-6+ getopt grep install libc-dev libz-dev
-make4.1+ perl python3.7+ rsync subversion unzip which
+setenv ipaddr 192.168.165.123
+setenv serverip 192.168.165.3
+tftpboot 0x800000 u-boot-wtplug_tc.kwb
 ```
 
-### Quickstart
+3b) Флешка  - вставьте её, просканируйте usb, и загрузите с нее u-boot
+```
+usb start
+load usb 0:1 0x800000 u-boot-wtplug_tc.kwb
+```
 
-1. Run `./scripts/feeds update -a` to obtain all the latest package definitions
-   defined in feeds.conf / feeds.conf.default
+4) Стираем NAND и прошиваем скаченный u-boot
+   ```
+   nand erase.chip
+   nand write 0x800000 u-boot ${filesize}
+   reset
+   ```
 
-2. Run `./scripts/feeds install -a` to install symlinks for all obtained
-   packages into package/feeds/
+5) Восстанавливаем MACи
+   ```
+   setenv ethaddr 02:50:43:13:50:e6
+   setenv eth1addr 02:50:43:ff:50:8f
+   ```
+   заодно и адреса можно дописать (в случае с tftp)
+   ```
+   setenv ipaddr 192.168.165.123
+   setenv serverip 192.168.165.3
+   ```
+   сохраняем MACи и адреса в env
+   ```
+   saveenv
+   ```
 
-3. Run `make menuconfig` to select your preferred configuration for the
-   toolchain, target system & firmware packages.
+6) Грузимся в initramfs-uImage образ, с tftp или с usb
 
-4. Run `make` to build your firmware. This will download all sources, build the
-   cross-compile toolchain and then cross-compile the GNU/Linux kernel & all chosen
-   applications for your target system.
+6a) если с tftp
+```
+tftpboot 0x800000 openwrt-xx.xx.x-kirkwood-generic-promwad_wtplug-tc-initramfs-uImage && bootm 0x800000
+```
 
-### Related Repositories
+6b) если с usb
+```
+usb start
+load usb 0:1 0x800000 openwrt-xx.xx.x-kirkwood-generic-promwad_wtplug-tc-initramfs-uImage && bootm 0x800000
+```
 
-The main repository uses multiple sub-repositories to manage packages of
-different categories. All packages are installed via the OpenWrt package
-manager called `opkg`. If you're looking to develop the web interface or port
-packages to OpenWrt, please find the fitting repository below.
+7) Оказавшись в openwrt - получаем dhcp от крайнего lan порта. И для завершения прошивки шьем
+openwrt-xx.x.x-kirkwood-generic-promwad_wtplug-tc-squashfs-sysupgrade.bin
+через веб (или консоль) без галок сохранения конфига
 
-* [LuCI Web Interface](https://github.com/openwrt/luci): Modern and modular
-  interface to control the device via a web browser.
 
-* [OpenWrt Packages](https://github.com/openwrt/packages): Community repository
-  of ported packages.
 
-* [OpenWrt Routing](https://github.com/openwrt/routing): Packages specifically
-  focused on (mesh) routing.
 
-* [OpenWrt Video](https://github.com/openwrt/video): Packages specifically
-  focused on display servers and clients (Xorg and Wayland).
 
-## Support Information
+### Если сборка с githib уже прошита, и нужно обновление
 
-For a list of supported devices see the [OpenWrt Hardware Database](https://openwrt.org/supported_devices)
+Просто прошей новый sysupgrade образ из веба (или консоли)
 
-### Documentation
 
-* [Quick Start Guide](https://openwrt.org/docs/guide-quick-start/start)
-* [User Guide](https://openwrt.org/docs/guide-user/start)
-* [Developer Documentation](https://openwrt.org/docs/guide-developer/start)
-* [Technical Reference](https://openwrt.org/docs/techref/start)
 
-### Support Community
 
-* [Forum](https://forum.openwrt.org): For usage, projects, discussions and hardware advise.
-* [Support Chat](https://webchat.oftc.net/#openwrt): Channel `#openwrt` on **oftc.net**.
 
-### Developer Community
 
-* [Bug Reports](https://bugs.openwrt.org): Report bugs in OpenWrt
-* [Dev Mailing List](https://lists.openwrt.org/mailman/listinfo/openwrt-devel): Send patches
-* [Dev Chat](https://webchat.oftc.net/#openwrt-devel): Channel `#openwrt-devel` on **oftc.net**.
+### Раскирпичивание
 
-## License
+В SoС есть аппаратный загрузик, так что девайс нереально окирпичить с концами.
+Окирпичил? Выполняй раздел с прошивкой впервые (с serial кабелем). 
+И еще - serial конвертер в некоторых экземплярах девайса так себе, иногда отваливается - помогает 10+ раз дернуть по питанию, или оставить девайс обесточенным на несколько часов.
 
-OpenWrt is licensed under GPL-2.0
+
+
+
+## Если нет serial кабеля
+
+
+### Прошивка OpenWRT из заводской Depo OS без serial кабеля
+(с помощью монитора + клавиатуры + флешки)
+
+!только для Depo Sky A60!
+
+1) добиваем u-boot-wtplug_tc.kwb нулями до размера в 4 МБ
+   ```
+   truncate -s 4M u-boot-wtplug_tc.kwb
+   ```
+   и кидаем итоговый файл в корень флешки (mbr, один раздел, fat32)
+
+2) врубаем тонкий и ждем загрузку Depo OS
+
+3) нажимаем CTRL+ATL+F2 чтобы появилась текстовая консоль логина и логинимся:
+   ```
+   root / kiziltas 
+   ```
+
+4) вставляем флешку в тонкий, монтируем в Depo OS:
+   ```
+   mount /dev/sda1 /mnt
+   ```
+   проверяем что флешка смонтировалась
+   ```
+   ls /mnt
+   ```
+   должны отобразиться файлы с флешки. если нет - НЕ ПРОДОЛЖАЕМ.
+   (если не монтируется, возможно номер раздела не sda1, а sda2, или sda3, ... зависит от разметки флешки. можно узнать с помощью ls /dev/sda*)
+
+5) проверяем текущую разметку тонкого:
+   ```
+   cat /proc/mtd
+   dev:    size    erasesize    name
+   mtd0: 00400000   ......     ......
+   mtd1: 00400000   ......     ...... 
+   ..................................
+   ```
+   если у первого раздела size отличается от 00400000 - НЕ ПРОДОЛЖАЕМ
+
+6) проверяем bad блоки
+   ```
+   dmesg | grep Bad
+   Bad eraseblock x at y
+   .....
+   ```
+   если у первого бэда y < 0x400000 - НЕ ПРОДОЛЖАЕМ
+
+7) шьем если все ок
+   ```
+   /localroot/gc/install/flash_erase /dev/mtd0 0 0
+   /localroot/gc/install/nandwrite /dev/mtd0 /mnt/u-boot-wtplug_tc.kwb
+   echo b > /proc/sysrq-trigger
+   ```
+
+8) тонкий ребутнется и стартанет u-boot с выводом на монитор и управлением с клавиатуры.
+
+9) продолжаем шить OpenWRT по инструкции из раздела "если шьете сборку с github впервые, не важно что стоит" с 5го пункта "Восстанавливаем MACи"
+
+
+
+
+
+
+### Прошивка OpenWRT из заводской ОС без serial кабеля (с помощью монитора + клавиатуры + флешки)
+!только для AK-Systems AK1100!
+
+WIP
+
+
+
+
+
+## в ОС
+
+LAN на крайнем порту, выдает DHCP.
+можно зайти по ssh или веб на 192.168.1.1
+
+
+### wifi
+1) проверьте что девайс виден
+   ```
+   lsusb
+   ```
+   или
+   ```
+   lspci
+   ```
+   (требуется пакет usbutils / pciutils)
+2) установите kmod пакет + firmware пакет для своего wifi
+3) reboot
+4) проверьте статус wifi карты
+   ```
+   iw list
+   ```
+5) настройте wifi
+
+
+### использование кнопки включения
+кнопка включения = кнопка reset
+(нажатие - рестарт, удержание >= 5 секунд - сброс в дефолт)
+
+чтобы убрать такое поведение:
+```
+rm /etc/rc.button/power
+```
+
+если хотите изменить поведение - редактируйте скрипт:
+```
+vi /etc/rc.button/power
+```
+и замените строку
+```
+exec /sbin/poweroff
+```
+на свою команду, например:
+```
+exec /sbin/reboot
+```
+если не срабатывает - жмите сильнее / держите пару секунд (кнопка плохого качества)
+
+
+### просмотр/правка u-boot envs из openwrt
+```
+fw_printenv / fw_setenv
+```
+
+
+### смена разрешения экрана
+
+в u-boot выполните
+```
+printenv
+```
+чтобы увидеть какие разрешения доступны
+
+применить выбранное, пример:
+```
+setenv video-mode ${res23}
+saveenv
+reset
+```
+
+
+### звук
+По умолчанию максимальная громкость + внутренний динамик активен. Замьютить внутренний динамик (оставив джек) и понизить громкость можно в alsamixer. Потом для сохранения после настройки выполнить:
+```
+alsactl -f /etc/asound.state store
+```
+
+
+## Подробнее о девайсе + сборка debian
+Статья:
+https://debianlive.ru/2025/02/depo-sky-a60-ak-systems-ak1100-%d0%bd%d0%b0-openwrt-%d0%ba%d0%b0%d0%ba-%d0%bb%d0%b5%d0%bd%d0%b8%d0%b2%d0%b0%d1%8f-%d0%bd%d0%b5%d0%b4%d0%be%d1%81%d0%b1%d0%be%d1%80%d0%ba%d0%b0-%d1%81%d1%82%d0%b0/
