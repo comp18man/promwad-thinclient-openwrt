@@ -1,0 +1,9 @@
+# procd listens on every uevent group, so each relayed event comes back
+# here. The marker stops the loop; without MAJOR/MINOR procd doesn't
+# mknod or rm the node again for the copy.
+
+[ -z "$LIBUDEV_ZERO_RELAYED" ] || exit 0
+
+export LIBUDEV_ZERO_RELAYED=1
+unset MAJOR MINOR
+exec /usr/libexec/libudev-zero-helper

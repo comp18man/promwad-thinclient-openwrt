@@ -1,0 +1,14 @@
+# The codec comes up muted with nothing routed. /etc/asound.state sends
+# the DAC to the headphones and, through the mono mixer, to the internal
+# buzzer on SPKOUT. Keep mixer changes with
+# alsactl -f /etc/asound.state store.
+
+[ "$ACTION" = add ] && [ "$DEVNAME" = snd/controlC0 ] || exit 0
+
+alsactl -U -f /etc/asound.state restore 0 2>/dev/kmsg
+
+(
+	speaker-test -t sine -f 3000 -c 2 >/dev/null 2>&1 &
+	sleep 1
+	kill $!
+) &

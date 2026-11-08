@@ -1,0 +1,26 @@
+video: fbdev: activate a display created after the video woke up
+
+fbdev creates its display in an idle callback. With a fake VT the seat wakes
+the video up before that, so the display stays offline, the seat never
+activates it and nothing is drawn.
+
+--- a/src/video/fbdev_video.c
++++ b/src/video/fbdev_video.c
+@@ -459,6 +459,17 @@
+ 		ev_eloop_rm_timer(dfb->vblank_timer);
+ 		return;
+ 	}
++
++	/*
++	 * A fake VT wakes the video up before this idle callback creates the
++	 * display, so the wake-up had nothing to activate yet.
++	 */
++	if (video_is_awake(video)) {
++		ret = display_activate_force(disp, false);
++		if (ret)
++			log_warning("cannot activate fbdev display: %d", ret);
++	}
++
+ 	display_ready(disp);
+ 	display_unref(disp);
+ }

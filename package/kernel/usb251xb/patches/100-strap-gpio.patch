@@ -1,0 +1,75 @@
+usb251xb: hold the configuration strap while the hub leaves reset
+
+On the WTPlug TC the CFG_SEL1 strap shares a pin with HS_IND and the board
+pull selects the wrong mode. "strap-gpios" drives the level that selects SMBus
+configuration from reset until the configuration is written, then releases
+the pin.
+
+--- a/usb251xb.c
++++ b/usb251xb.c
+@@ -115,6 +115,7 @@
+ 	struct regulator *vdd;
+ 	u8 skip_config;
+ 	struct gpio_desc *gpio_reset;
++	struct gpio_desc *gpio_strap;
+ 	u16 vendor_id;
+ 	u16 product_id;
+ 	u16 device_id;
+@@ -273,6 +274,10 @@
+ 
+ 	i2c_lock_bus(hub->i2c->adapter, I2C_LOCK_SEGMENT);
+ 
++	/* the hub latches its configuration straps when RESET_N goes high */
++	if (hub->gpio_strap)
++		gpiod_direction_output(hub->gpio_strap, 1);
++
+ 	gpiod_set_value_cansleep(hub->gpio_reset, 1);
+ 	usleep_range(1, 10);	/* >=1us RESET_N asserted */
+ 	gpiod_set_value_cansleep(hub->gpio_reset, 0);
+@@ -283,6 +288,13 @@
+ 	i2c_unlock_bus(hub->i2c->adapter, I2C_LOCK_SEGMENT);
+ }
+ 
++static void usb251xb_release_strap(struct usb251xb *hub)
++{
++	/* the strap pin doubles as an output of the configured hub */
++	if (hub->gpio_strap)
++		gpiod_direction_input(hub->gpio_strap);
++}
++
+ static int usb251xb_connect(struct usb251xb *hub)
+ {
+ 	struct device *dev = hub->dev;
+@@ -300,6 +312,7 @@
+ 
+ 		err = i2c_smbus_write_i2c_block_data(hub->i2c,
+ 				USB251XB_ADDR_STATUS_COMMAND, 2, i2c_wb);
++		usb251xb_release_strap(hub);
+ 		if (err) {
+ 			dev_err(dev, "attaching hub failed: %d\n", err);
+ 			return err;
+@@ -369,10 +382,12 @@
+ 			goto out_err;
+ 	}
+ 
++	usb251xb_release_strap(hub);
+ 	dev_info(dev, "Hub configuration was successful.\n");
+ 	return 0;
+ 
+ out_err:
++	usb251xb_release_strap(hub);
+ 	dev_err(dev, "configuring block %d failed: %d\n", i, err);
+ 	return err;
+ }
+@@ -414,6 +429,11 @@
+ 		return dev_err_probe(dev, PTR_ERR(hub->gpio_reset),
+ 				     "unable to request GPIO reset pin\n");
+ 
++	hub->gpio_strap = devm_gpiod_get_optional(dev, "strap", GPIOD_IN);
++	if (IS_ERR(hub->gpio_strap))
++		return dev_err_probe(dev, PTR_ERR(hub->gpio_strap),
++				     "unable to request GPIO strap pin\n");
++
+ 	if (of_property_read_u16(np, "vendor-id", &hub->vendor_id))
+ 		hub->vendor_id = USB251XB_DEF_VENDOR_ID;
+ 

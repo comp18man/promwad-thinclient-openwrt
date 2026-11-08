@@ -1,0 +1,14 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+USE_PROCD=1
+
+start_service() {
+	procd_open_instance
+	# xgi-fb can't blank the screen, so DPMS would only freeze the picture
+	procd_set_param command /usr/bin/kmscon \
+		--font-engine=8x16 --dpms-timeout=0 --no-issue \
+		--login -- /usr/libexec/login.sh
+	procd_set_param respawn
+	procd_close_instance
+}

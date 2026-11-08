@@ -1,0 +1,18 @@
+uterm: monitor: match drm events without a devtype
+
+libudev-zero keeps the devtypes of all subsystem filters in one list and
+checks it against every device, so "drm_minor" also drops input and
+graphics events, and keyboards plugged in after start are never seen.
+monitor_udev_add() and monitor_find_dev() already ignore DRM sub-devices.
+
+--- a/src/uterm/monitor.c
++++ b/src/uterm/monitor.c
+@@ -521,7 +521,7 @@
+ 		goto err_udev;
+ 	}
+ 
+-	ret = udev_monitor_filter_add_match_subsystem_devtype(mon->umon, "drm", "drm_minor");
++	ret = udev_monitor_filter_add_match_subsystem_devtype(mon->umon, "drm", NULL);
+ 	if (ret) {
+ 		errno = -ret;
+ 		log_err("cannot add udev filter (%d): %m", ret);

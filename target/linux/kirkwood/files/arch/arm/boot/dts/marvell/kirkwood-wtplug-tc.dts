@@ -1,0 +1,236 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Device Tree file for Promwad WTPlug Thin Client Board
+ * Copyright (C) 2024-2025 bodhi <mibodhi@gmail.com>
+ * and cmp18 have added some functions
+ */
+
+/dts-v1/;
+#include "kirkwood.dtsi"
+#include "kirkwood-6282.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "Promwad WTPlug Thin Client";
+	compatible = "promwad,wtplug-tc", "marvell,kirkwood-88f6282", "marvell,kirkwood";
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x00000000 0x40000000>; /* 1 GB */
+	};
+
+	chosen {
+		bootargs = "console=ttyS0,115200 vmalloc=64M ignore_loglevel";
+		stdout-path = &uart0;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pmx_led_green &pmx_led_red>;
+
+		led-green {
+			label = "wtplug:green";
+			gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+
+		led-red {
+			label = "wtplug:red";
+			gpios = <&gpio0 17 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+	};
+
+	keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pmx_power_button>;
+
+		power {
+			label = "PowerButton";
+			linux,code = <KEY_POWER>;
+			gpios = <&gpio0 28 GPIO_ACTIVE_LOW>;
+			/* debounce-interval = <20>; */
+		};
+	};
+
+	sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "i2s";
+
+		simple-audio-card,bitclock-master = <&sound_cpu>;
+		simple-audio-card,frame-master = <&sound_cpu>;
+
+		/* The codec MCLK is MPP42, driven by the SoC DCO at 256 fs */
+		simple-audio-card,mclk-fs = <256>;
+
+		simple-audio-card,widgets =
+			"Headphone", "Headphone Jack",
+			"Microphone", "Mic Jack";
+
+		simple-audio-card,routing =
+			"Headphone Jack", "HPL",
+			"Headphone Jack", "HPR",
+			"MIC1", "Mic Jack",
+			"MIC2", "Mic Jack";
+
+		sound_cpu: simple-audio-card,cpu {
+			sound-dai = <&audio0>;
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&alc5621>;
+		};
+	};
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&pinctrl {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pmx_pcie_rst &pmx_gpu_rst &pmx_usb_strap &pmx_usb_rst>;
+
+	/* MPP7 is output-only, its GPIO function is "gpo" */
+	pmx_led_green: pmx-led-green {
+		marvell,pins = "mpp7";
+		marvell,function = "gpo";
+	};
+
+	pmx_led_red: pmx-led-red {
+		marvell,pins = "mpp17";
+		marvell,function = "gpio";
+	};
+
+	pmx_power_button: pmx-power-button {
+		marvell,pins = "mpp28";
+		marvell,function = "gpio";
+	};
+
+	pmx_pcie_rst: pmx-pcie-rst {
+		marvell,pins = "mpp13";
+		marvell,function = "gpio";
+	};
+
+	pmx_gpu_rst: pmx-gpu-rst {
+		marvell,pins = "mpp38";
+		marvell,function = "gpio";
+	};
+
+	pmx_i2s: pmx-i2s {
+		marvell,pins = "mpp39", "mpp40", "mpp41", "mpp42", "mpp43";
+		marvell,function = "audio";
+	};
+
+	pmx_usb_strap: pmx-usb-strap {
+		marvell,pins = "mpp46";
+		marvell,function = "gpio";
+	};
+
+	pmx_usb_rst: pmx-usb-rst {
+		marvell,pins = "mpp48";
+		marvell,function = "gpio";
+	};
+};
+
+&audio0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pmx_i2s>;
+	status = "okay";
+};
+
+&i2c0 {
+	status = "okay";
+
+	alc5621: alc5621@1a {
+		compatible = "realtek,alc5621", "realtek,alc5623";
+		reg = <0x1a>;
+		#sound-dai-cells = <0>;
+
+		add-ctrl = <0x3700>;
+		jack-det-ctrl = <0x4980>;
+	};
+};
+
+&i2c1 {
+	status = "okay";
+
+	usb_hub: usb-hub@2c {
+		compatible = "microchip,usb2517";
+		reg = <0x2c>;
+		reset-gpios = <&gpio1 16 GPIO_ACTIVE_LOW>;
+		/* CFG_SEL1 on HS_IND: low at reset release selects SMBus config */
+		strap-gpios = <&gpio1 14 GPIO_ACTIVE_LOW>;
+
+		self-powered;
+		individual-port-switching;
+		individual-sensing;
+
+		vendor-id = /bits/ 16 <0x0424>;
+		product-id = /bits/ 16 <0x2517>;
+		device-id = /bits/ 16 <0x0bb3>;
+	};
+};
+
+&nand {
+	chip-delay = <25>;
+	status = "okay";
+
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		partition@0 {
+			label = "u-boot";
+			reg = <0x0 0xe0000>;
+			read-only;
+		};
+
+		partition@e0000 {
+			label = "u-boot-env";
+			reg = <0xe0000 0x20000>;
+		};
+
+		partition@100000 {
+			label = "ubi";
+			reg = <0x100000 0x3ff00000>;
+		};
+	};
+};
+
+&mdio {
+	status = "okay";
+	ethphy0: ethernet-phy@1 { reg = <1>; };
+	ethphy1: ethernet-phy@0 { reg = <0>; };
+};
+
+&eth0 {
+	status = "okay";
+	ethernet0-port@0 { phy-handle = <&ethphy0>; };
+};
+
+&eth1 {
+	status = "okay";
+	ethernet1-port@0 { phy-handle = <&ethphy1>; };
+};
+
+/*
+ * No reset-gpios: U-Boot has set up the GPU for xgi-fb, and a reset here
+ * would lose the mode. PERST of pcie0 is GPIO13, GPU_RESET is GPIO38.
+ */
+&pcie0 {
+	status = "okay";
+};
+
+&pcie1 {
+	status = "okay";
+};
+
+&pciec {
+	status = "okay";
+};

@@ -1,0 +1,17 @@
+alc5623: accept a zero sysclk
+
+With mclk-fs, simple-card releases the codec clock on shutdown by setting
+sysclk to 0. The driver rejected that, so every stream close logged
+"ASoC: error at snd_soc_dai_set_sysclk on alc5621-hifi: -22". The next
+hw_params sets the real clock again.
+
+--- a/alc5623.c
++++ b/alc5623.c
+@@ -621,6 +621,7 @@
+ 	struct alc5623_priv *alc5623 = snd_soc_component_get_drvdata(component);
+ 
+ 	switch (freq) {
++	case 0:
+ 	case  8192000:
+ 	case 11289600:
+ 	case 12288000:

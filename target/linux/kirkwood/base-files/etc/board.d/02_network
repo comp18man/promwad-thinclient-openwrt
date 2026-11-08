@@ -48,6 +48,9 @@ kirkwood_setup_interfaces()
 	linksys,ea4500)
 		ucidef_set_interfaces_lan_wan "ethernet1 ethernet2 ethernet3 ethernet4" "internet"
 		;;
+	promwad,wtplug-tc)
+		ucidef_set_interfaces_lan_wan "eth0" "eth1"
+		;;
 	*)
 		ucidef_set_interface_lan "eth0"
 		;;
@@ -73,6 +76,10 @@ kirkwood_setup_macs()
 	linksys,ea3500|\
 	linksys,ea4500)
 		wan_mac=$(mtd_get_mac_ascii u_env eth1addr)
+		;;
+	promwad,wtplug-tc)
+		lan_mac=$(mtd_get_mac_ascii u-boot-env ethaddr)
+		wan_mac=$(mtd_get_mac_ascii u-boot-env eth1addr)
 		;;
 	zyxel,nsa310b|\
 	zyxel,nsa325)

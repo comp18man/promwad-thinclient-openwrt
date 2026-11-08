@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0
+
+obj-m += snd-soc-kirkwood.o snd-soc-alc5623.o \
+	snd-soc-simple-card-utils.o snd-soc-simple-card.o
+
+snd-soc-kirkwood-y := kirkwood-dma.o kirkwood-i2s.o
+snd-soc-alc5623-y := alc5623.o
+snd-soc-simple-card-utils-y := simple-card-utils.o
+snd-soc-simple-card-y := simple-card.o

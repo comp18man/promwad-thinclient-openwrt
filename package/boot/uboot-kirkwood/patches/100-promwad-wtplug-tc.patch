@@ -1,0 +1,3081 @@
+arm: kirkwood: add Promwad WTPlug Thin Client
+
+Board, XGI Z11 video driver, PCIe I/O remap and default environment.
+
+diff --git a/arch/arm/dts/Makefile b/arch/arm/dts/Makefile
+index 37d3b6fd3cc..c37fd7d401c 100644
+--- a/arch/arm/dts/Makefile
++++ b/arch/arm/dts/Makefile
+@@ -39,7 +39,8 @@ dtb-$(CONFIG_ARCH_DAVINCI) += \
+ 
+ dtb-$(CONFIG_ARCH_KIRKWOOD) += \
+ 	kirkwood-atl-sbx81lifkw.dtb \
+-	kirkwood-atl-sbx81lifxcat.dtb
++	kirkwood-atl-sbx81lifxcat.dtb \
++	kirkwood-wtplug-tc.dtb
+ 
+ dtb-$(CONFIG_MACH_S900) += \
+ 	bubblegum_96.dtb
+diff --git a/arch/arm/dts/kirkwood-wtplug-tc-u-boot.dtsi b/arch/arm/dts/kirkwood-wtplug-tc-u-boot.dtsi
+new file mode 100644
+index 00000000000..452606404aa
+--- /dev/null
++++ b/arch/arm/dts/kirkwood-wtplug-tc-u-boot.dtsi
+@@ -0,0 +1,15 @@
++// SPDX-License-Identifier: GPL-2.0+
++
++#include <dt-bindings/gpio/gpio.h>
++
++/* ft_board_setup() undoes both changes in the tree handed to the kernel */
++
++/* PERST resets the GPU before the video POST */
++&pcie0 {
++	reset-gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
++};
++
++/* Kirkwood U-Boot sets up MBus windows for the first PCIe port only */
++&pcie1 {
++	status = "disabled";
++};
+diff --git a/arch/arm/dts/kirkwood-wtplug-tc.dts b/arch/arm/dts/kirkwood-wtplug-tc.dts
+new file mode 100644
+index 00000000000..a74d61a36e5
+--- /dev/null
++++ b/arch/arm/dts/kirkwood-wtplug-tc.dts
+@@ -0,0 +1,236 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Device Tree file for Promwad WTPlug Thin Client Board
++ * Copyright (C) 2024-2025 bodhi <mibodhi@gmail.com>
++ * and cmp18 have added some functions
++ */
++
++/dts-v1/;
++#include "kirkwood.dtsi"
++#include "kirkwood-6282.dtsi"
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++#include <dt-bindings/leds/common.h>
++
++/ {
++	model = "Promwad WTPlug Thin Client";
++	compatible = "promwad,wtplug-tc", "marvell,kirkwood-88f6282", "marvell,kirkwood";
++
++	memory@0 {
++		device_type = "memory";
++		reg = <0x00000000 0x40000000>; /* 1 GB */
++	};
++
++	chosen {
++		bootargs = "console=ttyS0,115200 vmalloc=64M ignore_loglevel";
++		stdout-path = &uart0;
++	};
++
++	leds {
++		compatible = "gpio-leds";
++		pinctrl-names = "default";
++		pinctrl-0 = <&pmx_led_green &pmx_led_red>;
++
++		led-green {
++			label = "wtplug:green";
++			gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
++			default-state = "off";
++		};
++
++		led-red {
++			label = "wtplug:red";
++			gpios = <&gpio0 17 GPIO_ACTIVE_HIGH>;
++			default-state = "off";
++		};
++	};
++
++	keys {
++		compatible = "gpio-keys";
++		pinctrl-names = "default";
++		pinctrl-0 = <&pmx_power_button>;
++
++		power {
++			label = "PowerButton";
++			linux,code = <KEY_POWER>;
++			gpios = <&gpio0 28 GPIO_ACTIVE_LOW>;
++			/* debounce-interval = <20>; */
++		};
++	};
++
++	sound {
++		compatible = "simple-audio-card";
++		simple-audio-card,format = "i2s";
++
++		simple-audio-card,bitclock-master = <&sound_cpu>;
++		simple-audio-card,frame-master = <&sound_cpu>;
++
++		/* The codec MCLK is MPP42, driven by the SoC DCO at 256 fs */
++		simple-audio-card,mclk-fs = <256>;
++
++		simple-audio-card,widgets =
++			"Headphone", "Headphone Jack",
++			"Microphone", "Mic Jack";
++
++		simple-audio-card,routing =
++			"Headphone Jack", "HPL",
++			"Headphone Jack", "HPR",
++			"MIC1", "Mic Jack",
++			"MIC2", "Mic Jack";
++
++		sound_cpu: simple-audio-card,cpu {
++			sound-dai = <&audio0>;
++		};
++
++		simple-audio-card,codec {
++			sound-dai = <&alc5621>;
++		};
++	};
++};
++
++&uart0 {
++	status = "okay";
++};
++
++&pinctrl {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pmx_pcie_rst &pmx_gpu_rst &pmx_usb_strap &pmx_usb_rst>;
++
++	/* MPP7 is output-only, its GPIO function is "gpo" */
++	pmx_led_green: pmx-led-green {
++		marvell,pins = "mpp7";
++		marvell,function = "gpo";
++	};
++
++	pmx_led_red: pmx-led-red {
++		marvell,pins = "mpp17";
++		marvell,function = "gpio";
++	};
++
++	pmx_power_button: pmx-power-button {
++		marvell,pins = "mpp28";
++		marvell,function = "gpio";
++	};
++
++	pmx_pcie_rst: pmx-pcie-rst {
++		marvell,pins = "mpp13";
++		marvell,function = "gpio";
++	};
++
++	pmx_gpu_rst: pmx-gpu-rst {
++		marvell,pins = "mpp38";
++		marvell,function = "gpio";
++	};
++
++	pmx_i2s: pmx-i2s {
++		marvell,pins = "mpp39", "mpp40", "mpp41", "mpp42", "mpp43";
++		marvell,function = "audio";
++	};
++
++	pmx_usb_strap: pmx-usb-strap {
++		marvell,pins = "mpp46";
++		marvell,function = "gpio";
++	};
++
++	pmx_usb_rst: pmx-usb-rst {
++		marvell,pins = "mpp48";
++		marvell,function = "gpio";
++	};
++};
++
++&audio0 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pmx_i2s>;
++	status = "okay";
++};
++
++&i2c0 {
++	status = "okay";
++
++	alc5621: alc5621@1a {
++		compatible = "realtek,alc5621", "realtek,alc5623";
++		reg = <0x1a>;
++		#sound-dai-cells = <0>;
++
++		add-ctrl = <0x3700>;
++		jack-det-ctrl = <0x4980>;
++	};
++};
++
++&i2c1 {
++	status = "okay";
++
++	usb_hub: usb-hub@2c {
++		compatible = "microchip,usb2517";
++		reg = <0x2c>;
++		reset-gpios = <&gpio1 16 GPIO_ACTIVE_LOW>;
++		/* CFG_SEL1 on HS_IND: low at reset release selects SMBus config */
++		strap-gpios = <&gpio1 14 GPIO_ACTIVE_LOW>;
++
++		self-powered;
++		individual-port-switching;
++		individual-sensing;
++
++		vendor-id = /bits/ 16 <0x0424>;
++		product-id = /bits/ 16 <0x2517>;
++		device-id = /bits/ 16 <0x0bb3>;
++	};
++};
++
++&nand {
++	chip-delay = <25>;
++	status = "okay";
++
++	partitions {
++		compatible = "fixed-partitions";
++		#address-cells = <1>;
++		#size-cells = <1>;
++
++		partition@0 {
++			label = "u-boot";
++			reg = <0x0 0xe0000>;
++			read-only;
++		};
++
++		partition@e0000 {
++			label = "u-boot-env";
++			reg = <0xe0000 0x20000>;
++		};
++
++		partition@100000 {
++			label = "ubi";
++			reg = <0x100000 0x3ff00000>;
++		};
++	};
++};
++
++&mdio {
++	status = "okay";
++	ethphy0: ethernet-phy@1 { reg = <1>; };
++	ethphy1: ethernet-phy@0 { reg = <0>; };
++};
++
++&eth0 {
++	status = "okay";
++	ethernet0-port@0 { phy-handle = <&ethphy0>; };
++};
++
++&eth1 {
++	status = "okay";
++	ethernet1-port@0 { phy-handle = <&ethphy1>; };
++};
++
++/*
++ * No reset-gpios: U-Boot has set up the GPU for xgi-fb, and a reset here
++ * would lose the mode. PERST of pcie0 is GPIO13, GPU_RESET is GPIO38.
++ */
++&pcie0 {
++	status = "okay";
++};
++
++&pcie1 {
++	status = "okay";
++};
++
++&pciec {
++	status = "okay";
++};
+diff --git a/arch/arm/mach-kirkwood/Kconfig b/arch/arm/mach-kirkwood/Kconfig
+index 8d56ca1a6e3..2e9408b7b61 100644
+--- a/arch/arm/mach-kirkwood/Kconfig
++++ b/arch/arm/mach-kirkwood/Kconfig
+@@ -161,6 +161,13 @@ config TARGET_SBx81LIFXCAT
+ 	select KW88F6281
+ 	select KIRKWOOD_COMMON
+ 
++config TARGET_WTPLUG_TC
++	bool "Promwad WTPlug Thin Client"
++	select DM_USB if USB
++	select FEROCEON_88FR131
++	select KW88F6281
++	select KIRKWOOD_COMMON
++
+ endchoice
+ 
+ config SYS_SOC
+@@ -198,5 +205,6 @@ source "board/zyxel/nsa310s/Kconfig"
+ source "board/zyxel/nsa325/Kconfig"
+ source "board/alliedtelesis/SBx81LIFKW/Kconfig"
+ source "board/alliedtelesis/SBx81LIFXCAT/Kconfig"
++source "board/promwad/wtplug_tc/Kconfig"
+ 
+ endif
+diff --git a/arch/arm/mach-kirkwood/include/mach/mpp.h b/arch/arm/mach-kirkwood/include/mach/mpp.h
+index f50156b3357..0ef0bf513f5 100644
+--- a/arch/arm/mach-kirkwood/include/mach/mpp.h
++++ b/arch/arm/mach-kirkwood/include/mach/mpp.h
+@@ -233,11 +233,13 @@
+ #define MPP36_TSMP0		MPP( 36, 0x1, 1, 1, 0,   0,   0,   1    )
+ #define MPP36_TDM_SPI_CS1	MPP( 36, 0x2, 0, 1, 0,   0,   0,   1    )
+ #define MPP36_AUDIO_SPDIFI	MPP( 36, 0x4, 1, 0, 1,   0,   0,   1    )
++#define MPP36_TW1_SDA		MPP( 36, 0xb, 1, 1, 0,   0,   0,   1    )
+ 
+ #define MPP37_GPIO		MPP( 37, 0x0, 1, 1, 1,   0,   0,   1    )
+ #define MPP37_TSMP1		MPP( 37, 0x1, 1, 1, 0,   0,   0,   1    )
+ #define MPP37_TDM_CH2_TX_QL	MPP( 37, 0x2, 0, 1, 0,   0,   0,   1    )
+ #define MPP37_AUDIO_SPDIFO	MPP( 37, 0x4, 0, 1, 1,   0,   0,   1    )
++#define MPP37_TW1_SCK		MPP( 37, 0xb, 1, 1, 0,   0,   0,   1    )
+ 
+ #define MPP38_GPIO		MPP( 38, 0x0, 1, 1, 1,   0,   0,   1    )
+ #define MPP38_TSMP2		MPP( 38, 0x1, 1, 1, 0,   0,   0,   1    )
+diff --git a/board/promwad/wtplug_tc/Kconfig b/board/promwad/wtplug_tc/Kconfig
+new file mode 100644
+index 00000000000..89f72341d5e
+--- /dev/null
++++ b/board/promwad/wtplug_tc/Kconfig
+@@ -0,0 +1,12 @@
++if TARGET_WTPLUG_TC
++
++config SYS_BOARD
++	default "wtplug_tc"
++
++config SYS_VENDOR
++	default "promwad"
++
++config SYS_CONFIG_NAME
++	default "wtplug_tc"
++
++endif
+diff --git a/board/promwad/wtplug_tc/MAINTAINERS b/board/promwad/wtplug_tc/MAINTAINERS
+new file mode 100644
+index 00000000000..9b761b4e8a3
+--- /dev/null
++++ b/board/promwad/wtplug_tc/MAINTAINERS
+@@ -0,0 +1,8 @@
++WTPLUG_TC BOARD
++M:	cmp18 <comp18man@gmail.com>
++S:	Maintained
++F:	arch/arm/dts/kirkwood-wtplug-tc.dts
++F:	arch/arm/dts/kirkwood-wtplug-tc-u-boot.dtsi
++F:	board/promwad/wtplug_tc/
++F:	include/configs/wtplug_tc.h
++F:	configs/wtplug_tc_defconfig
+diff --git a/board/promwad/wtplug_tc/Makefile b/board/promwad/wtplug_tc/Makefile
+new file mode 100644
+index 00000000000..eabba5955ca
+--- /dev/null
++++ b/board/promwad/wtplug_tc/Makefile
+@@ -0,0 +1,3 @@
++# SPDX-License-Identifier: GPL-2.0+
++
++obj-y	:= wtplug_tc.o
+diff --git a/board/promwad/wtplug_tc/kwbimage.cfg b/board/promwad/wtplug_tc/kwbimage.cfg
+new file mode 100644
+index 00000000000..4c43dbc1c2e
+--- /dev/null
++++ b/board/promwad/wtplug_tc/kwbimage.cfg
+@@ -0,0 +1,146 @@
++# SPDX-License-Identifier: GPL-2.0+
++#
++# (C) Copyright 2009
++# Marvell Semiconductor <www.marvell.com>
++# Written-by: Siddarth Gore <gores@marvell.com>
++#
++# Modified-by: Viktar Palstsiuk <viktar.palstsiuk@promwad.com>
++#
++# Refer to doc/README.kwbimage for more details about how-to configure
++# and create kirkwood boot image
++#
++# Boot Media configurations
++BOOT_FROM	nand
++NAND_ECC_MODE	default
++NAND_PAGE_SIZE	0x0800
++
++# SOC registers configuration using bootrom header extension
++# Maximum KWBIMAGE_MAX_CONFIG configurations allowed
++
++# Configure RGMII-0/1 interface pad voltage to 1.8V
++DATA 0xFFD100e0 0x1b1b9b9b
++
++#Dram initalization for SINGLE x16 CL=5 @ 400MHz
++DATA 0xFFD01400 0x43000c30	# DDR Configuration register
++# bit13-0:  0xc30 (3120 DDR2 clks refresh rate)
++# bit23-14: zero
++# bit24: 1= enable exit self refresh mode on DDR access
++# bit25: 1 required
++# bit29-26: zero
++# bit31-30: 01
++
++DATA 0xFFD01404 0x37543000	# DDR Controller Control Low
++# bit 4:    0=addr/cmd in smame cycle
++# bit 5:    0=clk is driven during self refresh, we don't care for APX
++# bit 6:    0=use recommended falling edge of clk for addr/cmd
++# bit14:    0=input buffer always powered up
++# bit18:    1=cpu lock transaction enabled
++# bit23-20: 5=recommended value for CL=5 and STARTBURST_DEL disabled bit31=0
++# bit27-24: 7= CL+2, STARTBURST sample stages, for freqs 400MHz, unbuffered DIMM
++# bit30-28: 3 required
++# bit31:    0=no additional STARTBURST delay
++
++DATA 0xFFD01408 0x22125451	# DDR Timing (Low) (active cycles value +1)
++# bit3-0:   TRAS lsbs
++# bit7-4:   TRCD
++# bit11- 8: TRP
++# bit15-12: TWR
++# bit19-16: TWTR
++# bit20:    TRAS msb
++# bit23-21: 0x0
++# bit27-24: TRRD
++# bit31-28: TRTP
++
++DATA 0xFFD0140C 0x00000a33	#  DDR Timing (High)
++# bit6-0:   TRFC
++# bit8-7:   TR2R
++# bit10-9:  TR2W
++# bit12-11: TW2W
++# bit31-13: zero required
++
++DATA 0xFFD01410 0x00000000	#  DDR Address Control
++# bit1-0:   00, Cs0width=x8
++# bit3-2:   00, Cs0size=2Gb
++# bit5-4:   00, Cs1width=x8
++# bit7-6:   00, Cs1size=2Gb
++# bit9-8:   00, Cs2width=nonexistent
++# bit11-10: 00, Cs2size =nonexistent
++# bit13-12: 00, Cs3width=nonexistent
++# bit15-14: 00, Cs3size =nonexistent
++# bit16:    0,  Cs0AddrSel
++# bit17:    0,  Cs1AddrSel
++# bit18:    0,  Cs2AddrSel
++# bit19:    0,  Cs3AddrSel
++# bit31-20: 0 required
++
++DATA 0xFFD01414 0x00000000	#  DDR Open Pages Control
++# bit0:    0,  OpenPage enabled
++# bit31-1: 0 required
++
++DATA 0xFFD01418 0x00000000	#  DDR Operation
++# bit3-0:   0x0, DDR cmd
++# bit31-4:  0 required
++
++DATA 0xFFD0141C 0x00000C52	#  DDR Mode
++# bit2-0:   2, BurstLen=2 required
++# bit3:     0, BurstType=0 required
++# bit6-4:   4, CL=5
++# bit7:     0, TestMode=0 normal
++# bit8:     0, DLL reset=0 normal
++# bit11-9:  6, auto-precharge write recovery ????????????
++# bit12:    0, PD must be zero
++# bit31-13: 0 required
++
++DATA 0xFFD01420 0x00000040	#  DDR Extended Mode
++# bit0:    0,  DDR DLL enabled
++# bit1:    0,  DDR drive strenght normal
++# bit2:    0,  DDR ODT control lsd (disabled)
++# bit5-3:  000, required
++# bit6:    1,  DDR ODT control msb, (disabled)
++# bit9-7:  000, required
++# bit10:   0,  differential DQS enabled
++# bit11:   0, required
++# bit12:   0, DDR output buffer enabled
++# bit31-13: 0 required
++
++DATA 0xFFD01424 0x0000F17F	#  DDR Controller Control High
++# bit2-0:  111, required
++# bit3  :  1  , MBUS Burst Chop disabled
++# bit6-4:  111, required
++# bit7  :  0
++# bit8  :  1  , add writepath sample stage, must be 1 for DDR freq >= 300MHz
++# bit9  :  0  , no half clock cycle addition to dataout
++# bit10 :  0  , 1/4 clock cycle skew enabled for addr/ctl signals
++# bit11 :  0  , 1/4 clock cycle skew disabled for write mesh
++# bit15-12: 1111 required
++# bit31-16: 0    required
++
++DATA 0xFFD01428 0x00085520	# DDR2 ODT Read Timing (default values)
++DATA 0xFFD0147C 0x00008552	# DDR2 ODT Write Timing (default values)
++
++DATA 0xFFD01500 0x00000000	# CS[0]n Base address to 0x0
++DATA 0xFFD01504 0x1FFFFFF1	# CS[0]n Size
++# bit0:    1,  Window enabled
++# bit1:    0,  Write Protect disabled
++# bit3-2:  00, CS0 hit selected
++# bit23-4: ones, required
++# bit31-24: 0x1F, Size (i.e. 512MB)
++
++DATA 0xFFD01508 0x20000000	# CS[1]n Base address to 512Mb
++DATA 0xFFD0150C 0x1FFFFFF5	# CS[1]n Size 512Mb Window enabled for CS1
++
++DATA 0xFFD01514 0x00000000	# CS[2]n Size, window disabled
++DATA 0xFFD0151C 0x00000000	# CS[3]n Size, window disabled
++
++DATA 0xFFD01494 0x00030000	#  DDR ODT Control (Low)
++DATA 0xFFD01498 0x00000000	#  DDR ODT Control (High)
++# bit1-0:  00, ODT0 controlled by ODT Control (low) register above
++# bit3-2:  01, ODT1 active NEVER!
++# bit31-4: zero, required
++
++DATA 0xFFD0149C 0x0000E803	# CPU ODT Control
++DATA 0xFFD01480 0x00000001	# DDR Initialization Control
++#bit0=1, enable DDR init upon this register write
++
++# End of Header extension
++DATA 0x0 0x0
+diff --git a/board/promwad/wtplug_tc/wtplug_tc.c b/board/promwad/wtplug_tc/wtplug_tc.c
+new file mode 100644
+index 00000000000..4cf1f160646
+--- /dev/null
++++ b/board/promwad/wtplug_tc/wtplug_tc.c
+@@ -0,0 +1,232 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * (C) Copyright 2011
++ * Promwad Innovation Company <www.promwad.com>
++ * Written-by: Viktar Palstsiuk <viktar.palstsiuk@promwad.com>
++ */
++
++#include <dm.h>
++#include <env.h>
++#include <fdt_support.h>
++#include <init.h>
++#include <iomux.h>
++#include <miiphy.h>
++#include <stdio.h>
++#include <video.h>
++#include <asm/global_data.h>
++#include <asm/io.h>
++#include <asm/mach-types.h>
++#include <asm/arch/cpu.h>
++#include <asm/arch/soc.h>
++#include <asm/arch/mpp.h>
++#include <linux/bitops.h>
++#include <linux/delay.h>
++#include <linux/mii.h>
++
++DECLARE_GLOBAL_DATA_PTR;
++
++#define GREEN_LED		BIT(7)
++#define RED_LED			BIT(17)
++#define GPU_RESET		BIT(38 - 32)
++#define USB_HS_IND		BIT(46 - 32)
++#define RST_GE			BIT(47 - 32)
++#define RST_USB			BIT(48 - 32)
++
++#define WTPLUG_TC_OE_LOW	(~(GREEN_LED | RED_LED))
++#define WTPLUG_TC_OE_HIGH	(~(GPU_RESET | RST_GE | RST_USB))
++#define WTPLUG_TC_OE_VAL_LOW	GREEN_LED
++#define WTPLUG_TC_OE_VAL_HIGH	RST_GE
++
++#define MV88E1121_PAGE		22
++#define MV88E1121_MAC_CTRL2	21
++#define MV88E1121_RGMII_DELAYS	(BIT(5) | BIT(4))
++
++int board_early_init_f(void)
++{
++	static const u32 kwmpp_config[] = {
++		MPP0_NF_IO2,
++		MPP1_NF_IO3,
++		MPP2_NF_IO4,
++		MPP3_NF_IO5,
++		MPP4_NF_IO6,
++		MPP5_NF_IO7,
++		MPP6_SYSRST_OUTn,
++		MPP7_GPO,		/* green LED */
++		MPP8_TW_SDA,
++		MPP9_TW_SCK,
++		MPP10_UART0_TXD,
++		MPP11_UART0_RXD,
++		MPP12_GPO,
++		MPP13_GPIO,		/* PEX0_RST */
++		MPP14_GPIO,		/* WLAN_DIS */
++		MPP15_GPIO,
++		MPP16_GPIO,
++		MPP17_GPIO,		/* red LED */
++		MPP18_NF_IO0,
++		MPP19_NF_IO1,
++		MPP20_GE1_0,
++		MPP21_GE1_1,
++		MPP22_GE1_2,
++		MPP23_GE1_3,
++		MPP24_GE1_4,
++		MPP25_GE1_5,
++		MPP26_GE1_6,
++		MPP27_GE1_7,
++		MPP28_GPIO,		/* power button */
++		MPP29_GPIO,		/* WLAN LED */
++		MPP30_GE1_10,
++		MPP31_GE1_11,
++		MPP32_GE1_12,
++		MPP33_GE1_13,
++		MPP34_GPIO,
++		MPP35_GPIO,		/* PEX0_CLKREQ */
++		MPP36_TW1_SDA,
++		MPP37_TW1_SCK,
++		MPP38_GPIO,		/* GPU_RESET */
++		MPP39_AUDIO_I2SBCLK,
++		MPP40_AUDIO_I2SDO,
++		MPP41_AUDIO_I2SLRC,
++		MPP42_AUDIO_I2SMCLK,
++		MPP43_AUDIO_I2SDI,
++		MPP44_GPIO,		/* WAKE_WIFI */
++		MPP45_GPIO,		/* USB_IND */
++		MPP46_GPIO,		/* USB2517 HS_IND/CFG_SEL1 strap */
++		MPP47_GPIO,		/* RST_GE */
++		MPP48_GPIO,		/* RST_USB */
++		MPP49_GPIO,
++		0
++	};
++
++	mvebu_config_gpio(WTPLUG_TC_OE_VAL_LOW, WTPLUG_TC_OE_VAL_HIGH,
++			  WTPLUG_TC_OE_LOW, WTPLUG_TC_OE_HIGH);
++	kirkwood_mpp_conf(kwmpp_config, NULL);
++
++	return 0;
++}
++
++int board_init(void)
++{
++	struct kwgpio_registers *gpio1 =
++		(struct kwgpio_registers *)MVEBU_GPIO1_BASE;
++
++	gd->bd->bi_arch_number = MACH_TYPE_WTPLUG;
++	gd->bd->bi_boot_params = mvebu_sdram_bar(0) + 0x100;
++
++	/* Stock keeps GPU in reset 200 ms before PCIe init */
++	mdelay(200);
++	setbits_le32(&gpio1->dout, GPU_RESET);
++
++	return 0;
++}
++
++/* Stock U-Boot enables RGMII delays in both ports of the 88E1121R */
++static void wtplug_tc_phy_init(void)
++{
++	struct udevice *eth;
++	struct mii_dev *bus;
++	int addr, reg;
++
++	if (uclass_first_device_err(UCLASS_ETH, &eth))
++		return;
++
++	bus = miiphy_get_dev_by_name(eth->name);
++	if (!bus)
++		return;
++
++	for (addr = 0; addr < 2; addr++) {
++		bus->write(bus, addr, MDIO_DEVAD_NONE, MV88E1121_PAGE, 2);
++		reg = bus->read(bus, addr, MDIO_DEVAD_NONE, MV88E1121_MAC_CTRL2);
++		bus->write(bus, addr, MDIO_DEVAD_NONE, MV88E1121_MAC_CTRL2,
++			   reg | MV88E1121_RGMII_DELAYS);
++		bus->write(bus, addr, MDIO_DEVAD_NONE, MV88E1121_PAGE, 0);
++		reg = bus->read(bus, addr, MDIO_DEVAD_NONE, MII_BMCR);
++		bus->write(bus, addr, MDIO_DEVAD_NONE, MII_BMCR,
++			   reg | BMCR_RESET);
++	}
++}
++
++/*
++ * USB2517 latches CFG_SEL1 from its HS_IND pin at reset release. Board
++ * pull there is wrong, so drive the level that selects SMBus configuration
++ * while driver resets the hub, then hand the pin back to it.
++ */
++static void wtplug_tc_usb_hub_init(void)
++{
++	struct kwgpio_registers *gpio1 =
++		(struct kwgpio_registers *)MVEBU_GPIO1_BASE;
++	struct udevice *hub;
++	int ret;
++
++	clrbits_le32(&gpio1->dout, USB_HS_IND);
++	clrbits_le32(&gpio1->oe, USB_HS_IND);
++
++	ret = uclass_get_device_by_name(UCLASS_MISC, "usb-hub@2c", &hub);
++
++	setbits_le32(&gpio1->oe, USB_HS_IND);
++
++	if (ret)
++		printf("USB hub: configuration failed (%d)\n", ret);
++}
++
++static void wtplug_tc_attach_console(const int file, const char *name)
++{
++	const char *devs = env_get(name);
++
++	if (devs)
++		iomux_doenv(file, devs);
++}
++
++static void wtplug_tc_video_init(void)
++{
++	struct video_priv *priv;
++	struct udevice *video;
++	int ret;
++
++	ret = uclass_first_device_err(UCLASS_VIDEO, &video);
++	if (ret) {
++		printf("Video: init failed (%d)\n", ret);
++		return;
++	}
++
++	/* The PCI video console appears only now, after console_init_r() */
++	if (IS_ENABLED(CONFIG_CONSOLE_MUX)) {
++		wtplug_tc_attach_console(stdout, "stdout");
++		wtplug_tc_attach_console(stderr, "stderr");
++	}
++
++	priv = dev_get_uclass_priv(video);
++	printf("Video: %dx%dx%d\n", priv->xsize, priv->ysize,
++	       VNBITS(priv->bpix));
++}
++
++int board_late_init(void)
++{
++	wtplug_tc_phy_init();
++	wtplug_tc_usb_hub_init();
++
++	/* PCI needs the MBus windows and DRAM info set up by arch_misc_init() */
++	pci_init();
++	wtplug_tc_video_init();
++
++	return 0;
++}
++
++/*
++ * Give the kernel the board DTS without kirkwood-wtplug-tc-u-boot.dtsi:
++ * PERST would lose the GPU mode set up for xgi-fb, and Linux maps MBus
++ * windows for both PCIe ports itself.
++ */
++int ft_board_setup(void *blob, struct bd_info *bd)
++{
++	int node;
++
++	node = fdt_path_offset(blob, "/mbus@f1000000/pcie@82000000/pcie@1,0");
++	if (node >= 0)
++		fdt_delprop(blob, node, "reset-gpios");
++
++	node = fdt_path_offset(blob, "/mbus@f1000000/pcie@82000000/pcie@2,0");
++	if (node < 0)
++		return 0;
++
++	return fdt_setprop_string(blob, node, "status", "okay");
++}
+diff --git a/board/promwad/wtplug_tc/wtplug_tc.env b/board/promwad/wtplug_tc/wtplug_tc.env
+new file mode 100644
+index 00000000000..abab7340d94
+--- /dev/null
++++ b/board/promwad/wtplug_tc/wtplug_tc.env
+@@ -0,0 +1,52 @@
++/* SPDX-License-Identifier: GPL-2.0+ */
++
++kernel_addr_r=0x800000
++fdt_addr_r=0x2c00000
++ramdisk_addr_r=0x1100000
++scriptaddr=0x200000
++console=ttyS0,115200
++mtdids=nand0=orion_nand
++mtdparts=mtdparts=orion_nand:896k(u-boot),128k(u-boot-env),-(ubi)
++stdin=serial,usbkbd
++stdout=serial,vidconsole
++stderr=serial,vidconsole
++
++video-mode=xgi:1024x768-16@60
++res01=xgi:640x480-16@60
++res02=xgi:640x480-32@60
++res03=xgi:720x480-16@60
++res04=xgi:720x480-32@60
++res05=xgi:720x576-16@58
++res06=xgi:720x576-32@58
++res07=xgi:800x480-16@60
++res08=xgi:800x480-32@60
++res09=xgi:800x600-16@60
++res10=xgi:800x600-32@60
++res11=xgi:1024x768-16@60
++res12=xgi:1024x768-32@60
++res13=xgi:1024x576-16@60
++res14=xgi:1024x576-32@60
++res15=xgi:1280x720-16@60
++res16=xgi:1280x720-32@60
++res17=xgi:1280x768-16@60
++res18=xgi:1280x768-32@60
++res19=xgi:1280x1024-16@60
++res20=xgi:1280x1024-32@60
++res21=xgi:1280x960-16@70
++res22=xgi:1280x960-32@70
++res23=xgi:1400x1050-16@60
++res24=xgi:1400x1050-32@60
++res25=xgi:1600x1200-16@60
++res26=xgi:1600x1200-32@60
++res27=xgi:1920x1440-16@60
++res28=xgi:1920x1440-32@60
++res29=xgi:2048x1536-16@60
++res30=xgi:2048x1536-32@60
++
++/*
++ * The kernel has no HIGHMEM and keeps 240 MiB of its address space for
++ * vmalloc by default, which leaves 768 MiB of RAM, with 64 MiB it maps 944
++ */
++bootcmd=
++	setenv bootargs console=${console} vmalloc=64M;
++	ubi part ubi && ubi read ${kernel_addr_r} kernel && bootm ${kernel_addr_r}
+diff --git a/common/usb_kbd.c b/common/usb_kbd.c
+index 36107a3b278..ae56e949a0d 100644
+--- a/common/usb_kbd.c
++++ b/common/usb_kbd.c
+@@ -567,9 +567,11 @@ static int usb_kbd_probe_dev(struct usb_device *dev, unsigned int ifnum)
+ 
+ 	/*
+ 	 * Apple and Keychron keyboards do not report the device state. Reports
+-	 * are only returned during key presses.
++	 * are only returned during key presses. The interrupt queue doesn't
++	 * test the state, and polling needs it created.
+ 	 */
+-	if (quirks & USB_HID_QUIRK_POLL_NO_REPORT_IDLE) {
++	if (!IS_ENABLED(CONFIG_SYS_USB_EVENT_POLL_VIA_INT_QUEUE) &&
++	    (quirks & USB_HID_QUIRK_POLL_NO_REPORT_IDLE)) {
+ 		debug("USB KBD: quirk: skip testing device state\n");
+ 		return 1;
+ 	}
+diff --git a/configs/wtplug_tc_defconfig b/configs/wtplug_tc_defconfig
+new file mode 100644
+index 00000000000..a66fd63ea11
+--- /dev/null
++++ b/configs/wtplug_tc_defconfig
+@@ -0,0 +1,85 @@
++CONFIG_ARM=y
++CONFIG_SKIP_LOWLEVEL_INIT=y
++CONFIG_SYS_DCACHE_OFF=y
++CONFIG_ARCH_CPU_INIT=y
++CONFIG_SYS_THUMB_BUILD=y
++CONFIG_ARCH_KIRKWOOD=y
++CONFIG_SUPPORT_PASSING_ATAGS=y
++CONFIG_CMDLINE_TAG=y
++CONFIG_INITRD_TAG=y
++CONFIG_SYS_KWD_CONFIG="board/promwad/wtplug_tc/kwbimage.cfg"
++CONFIG_TEXT_BASE=0x600000
++CONFIG_NR_DRAM_BANKS=2
++CONFIG_TARGET_WTPLUG_TC=y
++CONFIG_ENV_SIZE=0x20000
++CONFIG_ENV_OFFSET=0xE0000
++CONFIG_DEFAULT_DEVICE_TREE="kirkwood-wtplug-tc"
++CONFIG_SYS_BOOTM_LEN=0x2000000
++CONFIG_SYS_LOAD_ADDR=0x800000
++CONFIG_IDENT_STRING="\nPromwad WTPlug Thin Client"
++CONFIG_PCI=y
++CONFIG_LTO=y
++CONFIG_HAS_BOARD_SIZE_LIMIT=y
++CONFIG_BOARD_SIZE_LIMIT=917504
++# CONFIG_BOOTSTD is not set
++CONFIG_BOOTDELAY=7
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_USE_PREBOOT=y
++CONFIG_CONSOLE_MUX=y
++CONFIG_BOARD_LATE_INIT=y
++CONFIG_HUSH_PARSER=y
++CONFIG_CYCLIC_MAX_CPU_TIME_US=50000
++# CONFIG_BOOTM_PLAN9 is not set
++# CONFIG_BOOTM_RTEMS is not set
++# CONFIG_BOOTM_VXWORKS is not set
++CONFIG_CMD_BOOTZ=y
++CONFIG_CMD_CACHE=y
++# CONFIG_CMD_ELF is not set
++# CONFIG_CMD_IMI is not set
++# CONFIG_CMD_XIMG is not set
++CONFIG_CMD_I2C=y
++CONFIG_CMD_NAND=y
++CONFIG_CMD_PCI=y
++CONFIG_CMD_USB=y
++CONFIG_CMD_DHCP=y
++CONFIG_CMD_MII=y
++CONFIG_CMD_PING=y
++CONFIG_CMD_EXT2=y
++CONFIG_CMD_FAT=y
++CONFIG_CMD_FS_GENERIC=y
++CONFIG_CMD_MTDPARTS=y
++CONFIG_CMD_UBI=y
++CONFIG_MTDIDS_DEFAULT="nand0=orion_nand"
++CONFIG_MTDPARTS_DEFAULT="mtdparts=orion_nand:896k(u-boot),128k(u-boot-env),-(ubi)"
++CONFIG_OF_CONTROL=y
++# CONFIG_OF_UPSTREAM is not set
++CONFIG_ENV_OVERWRITE=y
++CONFIG_ENV_IS_IN_NAND=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_NETCONSOLE=y
++CONFIG_DM_I2C=y
++CONFIG_SYS_I2C_MVTWSI=y
++CONFIG_USB_HUB_USB251XB=y
++# CONFIG_MMC is not set
++CONFIG_MTD=y
++CONFIG_MTD_RAW_NAND=y
++CONFIG_MVGBE=y
++CONFIG_MII=y
++CONFIG_PHY_MARVELL=y
++CONFIG_PCI_MVEBU=y
++CONFIG_DM_RTC=y
++CONFIG_RTC_MV=y
++CONFIG_SERIAL_RX_BUFFER=y
++CONFIG_SERIAL_RX_BUFFER_SIZE=1024
++CONFIG_USB=y
++CONFIG_USB_EHCI_HCD=y
++CONFIG_USB_KEYBOARD=y
++CONFIG_SYS_USB_EVENT_POLL_VIA_INT_QUEUE=y
++CONFIG_USB_STORAGE=y
++CONFIG_VIDEO=y
++CONFIG_VIDEO_COPY=y
++CONFIG_VIDEO_ANSI=y
++CONFIG_VIDEO_SYNC_MS=1
++CONFIG_SYS_WHITE_ON_BLACK=y
++CONFIG_CONSOLE_SCROLL_LINES=8
++CONFIG_VIDEO_XGI=y
+diff --git a/drivers/pci/pci_mvebu.c b/drivers/pci/pci_mvebu.c
+index 3985bd59607..70c897107c5 100644
+--- a/drivers/pci/pci_mvebu.c
++++ b/drivers/pci/pci_mvebu.c
+@@ -417,6 +417,8 @@ static int mvebu_pcie_probe(struct udevice *dev)
+ 	struct mvebu_pcie *pcie = dev_get_plat(dev);
+ 	struct udevice *ctlr = pci_get_controller(dev);
+ 	struct pci_controller *hose = dev_get_uclass_priv(ctlr);
++	pci_addr_t io_bus = pcie->io.start;
++	u32 io_skip = 0;
+ 	u32 reg;
+ 	int ret;
+ 
+@@ -515,6 +517,24 @@ static int mvebu_pcie_probe(struct udevice *dev)
+ 		pcie->io.start = 0;
+ 		pcie->io.end = -1;
+ 	}
++#else
++	if (resource_size(&pcie->io) &&
++	    !mvebu_mbus_del_window(pcie->io.start, resource_size(&pcie->io))) {
++		if (mvebu_mbus_add_window_remap_by_id(pcie->io_target,
++						      pcie->io_attr,
++						      pcie->io.start,
++						      resource_size(&pcie->io),
++						      0)) {
++			printf("%s: unable to remap mbus window for IO at %08x+%08x\n",
++			       pcie->name, (u32)pcie->io.start,
++			       (unsigned)resource_size(&pcie->io));
++			pcie->io.start = 0;
++			pcie->io.end = -1;
++		} else {
++			io_bus = 0;
++			io_skip = SZ_4K;
++		}
++	}
+ #endif
+ 
+ 	/* Setup windows and configure host bridge */
+@@ -535,8 +555,8 @@ static int mvebu_pcie_probe(struct udevice *dev)
+ 
+ 	if (resource_size(&pcie->io)) {
+ 		pci_set_region(hose->regions + hose->region_count,
+-			       pcie->io.start, pcie->io.start,
+-			       resource_size(&pcie->io),
++			       io_bus + io_skip, pcie->io.start + io_skip,
++			       resource_size(&pcie->io) - io_skip,
+ 			       PCI_REGION_IO);
+ 		hose->region_count++;
+ 	}
+diff --git a/drivers/video/Kconfig b/drivers/video/Kconfig
+index 15000e21840..efb6b0cc100 100644
+--- a/drivers/video/Kconfig
++++ b/drivers/video/Kconfig
+@@ -77,7 +77,7 @@ config BACKLIGHT
+ 
+ config VIDEO_PCI_DEFAULT_FB_SIZE
+ 	hex "Default framebuffer size to use if no drivers request it"
+-	default 0x1000000 if X86
++	default 0x1000000 if X86 || VIDEO_XGI
+ 	default 0x800000 if !X86 && VIDEO_BOCHS
+ 	default 0x0 if !X86 && !VIDEO_BOCHS
+ 	help
+@@ -349,6 +349,36 @@ config VIDEO_BOCHS_SIZE_Y
+ 
+ endif
+ 
++config VIDEO_XGI
++	bool "Enable XGI Volari Z11 (XG27) video support"
++	depends on PCI
++	help
++	  Enable this to drive the XGI Volari Z11 (XG27) PCI Express graphics
++	  chip. U-Boot brings the chip up without a video BIOS and sets a
++	  mode from the xgifb tables on its CRT1 and digital outputs.
++
++	  The "video-mode" environment variable, e.g. xgi:1280x1024-32@60,
++	  selects the mode at boot. Without it the defaults below are used.
++
++if VIDEO_XGI
++
++config VIDEO_XGI_SIZE_X
++	int "Default width of display (X resolution)"
++	default 1024
++
++config VIDEO_XGI_SIZE_Y
++	int "Default height of display (Y resolution)"
++	default 768
++
++config VIDEO_XGI_BPP
++	int "Default bits per pixel"
++	default 16
++	help
++	  Sets the colour depth of the display: 16 or 32. The refresh rate
++	  defaults to 60 Hz.
++
++endif
++
+ config VIDEO_COREBOOT
+ 	bool "Enable coreboot framebuffer driver support"
+ 	depends on X86
+diff --git a/drivers/video/Makefile b/drivers/video/Makefile
+index 082b8967982..6e51cfa436d 100644
+--- a/drivers/video/Makefile
++++ b/drivers/video/Makefile
+@@ -89,6 +89,7 @@ obj-$(CONFIG_VIDEO_SANDBOX_SDL) += sandbox_sdl.o
+ obj-$(CONFIG_VIDEO_SIMPLE) += simplefb.o
+ obj-$(CONFIG_VIDEO_VESA) += vesa.o
+ obj-$(CONFIG_VIDEO_SEPS525) += seps525.o
++obj-$(CONFIG_VIDEO_XGI) += xgi.o videomodes.o
+ obj-$(CONFIG_VIDEO_ZYNQMP_DPSUB) += zynqmp/
+ 
+ obj-y += bridge/
+diff --git a/drivers/video/xgi.c b/drivers/video/xgi.c
+new file mode 100644
+index 00000000000..fac1b2a2b13
+--- /dev/null
++++ b/drivers/video/xgi.c
+@@ -0,0 +1,1375 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * XGI Volari Z11 (XG27) video driver
++ *
++ * The chip is brought up without a video BIOS. Register programming follows
++ * the Linux xgifb staging driver by XGITECH and others, which in turn is
++ * based on the SiS frame buffer driver.
++ */
++
++#define LOG_CATEGORY	UCLASS_VIDEO
++
++#include <dm.h>
++#include <log.h>
++#include <pci.h>
++#include <video.h>
++#include <asm/io.h>
++#include <linux/bitops.h>
++#include <linux/delay.h>
++#include <linux/kernel.h>
++#include <linux/sizes.h>
++#include "videomodes.h"
++#include "xgi_tables.h"
++
++/* the relocated I/O BAR holds VGA ports 0x380-0x3ff */
++#define XGI_IO_BASE		0x380
++
++#define VGA_ATT_W		0x3c0
++#define VGA_MIS_W		0x3c2
++#define VGA_IS0_R		0x3c2
++#define VGA_SEQ_I		0x3c4
++#define VGA_PEL_MSK		0x3c6
++#define VGA_PEL_IW		0x3c8
++#define VGA_PEL_D		0x3c9
++#define VGA_GFX_I		0x3ce
++#define VGA_CRT_IC		0x3d4
++#define VGA_IS1_RC		0x3da
++
++#define XGI_PASSWORD		0x86
++#define XGI_PASSWORD_OK		0xa1
++
++#define XGI_MODE_INFO_MAGIC	0x42464758	/* "XGFB" */
++#define XGI_MODE_INFO_SIZE	SZ_4K
++
++/* xgi_ext_mode.mode_flag and xgi_ref_rate.info_flag */
++#define MODE_TYPE_MASK		0x0007
++#define MODE_EGA		0x02
++#define MODE_VGA		0x03
++#define INTERLACE_MODE		0x0080
++#define LINE_COMPARE_OFF	0x0400
++#define HALF_DCLK		0x1000
++#define DOUBLE_SCAN_MODE	0x8000
++#define HSYNC_NEGATIVE		0x4000
++#define VSYNC_NEGATIVE		0x8000
++
++/* CR32 */
++#define AVIDEO_SENSE		0x01
++#define SVIDEO_SENSE		0x02
++#define SCART_SENSE		0x04
++#define LCD_SENSE		0x08
++#define MONITOR2_SENSE		0x10
++#define MONITOR1_SENSE		0x20
++#define HITV_SENSE		0x40
++#define YPBPR_SENSE		0x80
++#define TV_SENSE		0xc7
++
++/* CR3D, CR3E */
++#define ACTIVE_CRT1		0x0010
++#define ACTIVE_LCD		0x0020
++#define ACTIVE_TV		0x0040
++#define ACTIVE_CRT2		0x0080
++#define ACTIVE_AVIDEO		0x0100
++#define ACTIVE_SVIDEO		0x0200
++#define ACTIVE_SCART		0x0400
++#define ACTIVE_HITV		0x0800
++#define ACTIVE_YPBPR		0x1000
++#define DISPLAY_FROM_CMOS	0x10
++
++/* CR30, CR31 */
++#define SET_SIMU_SCAN_MODE	0x0001
++#define SWITCH_CRT2		0x0002
++#define SET_CRT2_TO_AVIDEO	0x0004
++#define SET_CRT2_TO_SVIDEO	0x0008
++#define SET_CRT2_TO_SCART	0x0010
++#define SET_CRT2_TO_LCD		0x0020
++#define SET_NOT_SIMU_MODE	0x0400
++#define DISABLE_CRT2_DISPLAY	0x2000
++#define DRIVER_MODE		0x4000
++
++/* CR38 */
++#define SET_TO_LCDA		0x02
++#define ENABLE_DUAL_EDGE	0x01
++#define SET_YPBPR		0x04
++
++#define MODE_16BPP		0x05
++#define MODE_32BPP		0x07
++
++struct xgi_mode {
++	uint xres;
++	uint yres;
++	uint bpp;
++	uint refresh;
++	u8 mode_no;
++	u8 rate;
++};
++
++struct xgi_priv {
++	void __iomem *io;
++	void __iomem *fb;
++	ulong fb_size;
++	u8 cr97;
++	int ram_type;
++	bool lvds;
++	u8 mode_no;
++	u16 mode_type;
++	const struct xgi_ext_mode *ext;
++};
++
++static u8 xgi_in(struct xgi_priv *priv, uint port)
++{
++	return readb(priv->io + port - XGI_IO_BASE);
++}
++
++static void xgi_out(struct xgi_priv *priv, uint port, u8 val)
++{
++	writeb(val, priv->io + port - XGI_IO_BASE);
++}
++
++static u8 xgi_get(struct xgi_priv *priv, uint port, u8 index)
++{
++	xgi_out(priv, port, index);
++	return xgi_in(priv, port + 1);
++}
++
++static void xgi_set(struct xgi_priv *priv, uint port, u8 index, u8 val)
++{
++	xgi_out(priv, port, index);
++	xgi_out(priv, port + 1, val);
++}
++
++static void xgi_and_or(struct xgi_priv *priv, uint port, u8 index, uint and,
++		       uint or)
++{
++	xgi_set(priv, port, index, (xgi_get(priv, port, index) & and) | or);
++}
++
++static void xgi_and(struct xgi_priv *priv, uint port, u8 index, uint and)
++{
++	xgi_set(priv, port, index, xgi_get(priv, port, index) & and);
++}
++
++static void xgi_or(struct xgi_priv *priv, uint port, u8 index, uint or)
++{
++	xgi_set(priv, port, index, xgi_get(priv, port, index) | or);
++}
++
++/* SR3B[7] and SR3B[3] are the MAA15 and MAA11 power-on straps */
++static bool xgi_strapped_ddr(struct xgi_priv *priv)
++{
++	u8 sr3b = xgi_get(priv, VGA_SEQ_I, 0x3b) & 0x88;
++
++	return sr3b == 0x80 || sr3b == 0x08;
++}
++
++static u8 xgi_psc_value(struct xgi_priv *priv)
++{
++	u8 cr4a = xgi_get(priv, VGA_CRT_IC, 0x4a);
++	u8 val;
++
++	xgi_and(priv, VGA_CRT_IC, 0x4a, ~0x0c);
++	val = (xgi_get(priv, VGA_CRT_IC, 0x48) & 0x0c) >> 2;
++	xgi_set(priv, VGA_CRT_IC, 0x4a, cr4a);
++
++	return val | (xgi_get(priv, VGA_CRT_IC, 0xb4) & 0x04) << 3;
++}
++
++/* bit 5: panel signal, bit 1: backlight, bit 0: panel power */
++static void xgi_bl_signal_vdd(struct xgi_priv *priv, uint mask, uint val)
++{
++	if (mask & 0x20)
++		xgi_and_or(priv, VGA_CRT_IC, 0xb4, ~0x02, (val >> 4) & 0x02);
++	xgi_and_or(priv, VGA_CRT_IC, 0xb4, ~((mask & 0x20) >> 3),
++		   (val & 0x20) >> 3);
++
++	mask = (mask & 0x03) << 2;
++	val = (val & 0x03) << 2;
++	xgi_and(priv, VGA_CRT_IC, 0x4a, ~mask);
++	xgi_and_or(priv, VGA_CRT_IC, 0x48, ~mask, val);
++}
++
++static void xgi_display_off(struct xgi_priv *priv)
++{
++	if (xgi_psc_value(priv) & 0x02)
++		xgi_bl_signal_vdd(priv, 0x02, 0x00);
++	if (!priv->lvds)
++		xgi_bl_signal_vdd(priv, 0x20, 0x00);
++
++	xgi_and_or(priv, VGA_SEQ_I, 0x01, 0xdf, 0x20);
++}
++
++static void xgi_display_on(struct xgi_priv *priv)
++{
++	xgi_and(priv, VGA_SEQ_I, 0x01, 0xdf);
++	if (!priv->lvds)
++		xgi_bl_signal_vdd(priv, 0x20, 0x20);
++}
++
++static void xgi_set_std_regs(struct xgi_priv *priv)
++{
++	int i;
++
++	xgi_set(priv, VGA_SEQ_I, 0x00, 0x03);
++	for (i = 0; i < 4; i++)
++		xgi_set(priv, VGA_SEQ_I, i + 1, xgi_std_regs.sr[i]);
++
++	xgi_out(priv, VGA_MIS_W, xgi_std_regs.misc);
++
++	xgi_and(priv, VGA_CRT_IC, 0x11, 0x7f);
++	for (i = 0; i <= 0x18; i++)
++		xgi_set(priv, VGA_CRT_IC, i, xgi_std_regs.crtc[i]);
++
++	for (i = 0; i <= 0x13; i++) {
++		xgi_in(priv, VGA_IS1_RC);
++		xgi_out(priv, VGA_ATT_W, i);
++		xgi_out(priv, VGA_ATT_W, xgi_std_regs.attr[i]);
++	}
++	xgi_in(priv, VGA_IS1_RC);
++	xgi_out(priv, VGA_ATT_W, 0x14);
++	xgi_out(priv, VGA_ATT_W, 0x00);
++	xgi_in(priv, VGA_IS1_RC);
++	xgi_out(priv, VGA_ATT_W, 0x20);
++
++	for (i = 0; i <= 0x08; i++)
++		xgi_set(priv, VGA_GFX_I, i, xgi_std_regs.grc[i]);
++	if (priv->mode_type > MODE_VGA)
++		xgi_and(priv, VGA_GFX_I, 0x05, 0xbf);
++
++	for (i = 0x0a; i <= 0x0e; i++)
++		xgi_set(priv, VGA_SEQ_I, i, 0x00);
++}
++
++static void xgi_set_default_vclk(struct xgi_priv *priv)
++{
++	xgi_and_or(priv, VGA_SEQ_I, 0x31, ~0x30, 0x20);
++	xgi_set(priv, VGA_SEQ_I, 0x2b, xgi_vclks[0].sr2b);
++	xgi_set(priv, VGA_SEQ_I, 0x2c, xgi_vclks[0].sr2c);
++
++	xgi_and_or(priv, VGA_SEQ_I, 0x31, ~0x30, 0x10);
++	xgi_set(priv, VGA_SEQ_I, 0x2b, xgi_vclks[1].sr2b);
++	xgi_set(priv, VGA_SEQ_I, 0x2c, xgi_vclks[1].sr2c);
++
++	xgi_and(priv, VGA_SEQ_I, 0x31, ~0x30);
++}
++
++static const struct xgi_ref_rate *xgi_find_rate(struct xgi_priv *priv)
++{
++	const struct xgi_ref_rate *rate = &xgi_ref_rates[priv->ext->ref_index];
++	u16 index = xgi_get(priv, VGA_CRT_IC, 0x33) & 0x0f;
++	int i;
++
++	if (index > 0)
++		index--;
++
++	if ((rate->xres == 800 && rate->yres == 600) ||
++	    (rate->xres == 1024 && rate->yres == 768) ||
++	    (rate->xres == 1280 && rate->yres == 1024))
++		index++;
++
++	i = 0;
++	do {
++		if (rate[i].mode_id != rate->mode_id)
++			break;
++		if ((rate[i].info_flag & MODE_TYPE_MASK) < priv->mode_type)
++			break;
++		i++;
++		index--;
++	} while (index != 0xffff);
++
++	return &rate[i - 1];
++}
++
++static void xgi_set_crt1_crtc(struct xgi_priv *priv,
++			      const struct xgi_ref_rate *rate)
++{
++	const u8 *t = xgi_crt1_timings[rate->crt1_crtc].cr;
++	u8 data, data1;
++	int i;
++
++	xgi_and(priv, VGA_CRT_IC, 0x11, 0x7f);
++
++	xgi_set(priv, VGA_CRT_IC, 0x00, t[0]);
++	for (i = 1; i <= 4; i++)
++		xgi_set(priv, VGA_CRT_IC, i + 1, t[i]);
++	for (i = 5; i <= 6; i++)
++		xgi_set(priv, VGA_SEQ_I, i + 6, t[i]);
++	xgi_and_or(priv, VGA_SEQ_I, 0x0e, 0x1f, t[7] & 0xe0);
++
++	data = xgi_get(priv, VGA_CRT_IC, 0x04);
++	xgi_set(priv, VGA_CRT_IC, 0x04, data - 1);
++	data = xgi_get(priv, VGA_CRT_IC, 0x05);
++	data1 = data & 0xe0;
++	data &= 0x1f;
++	if (!data)
++		xgi_and(priv, VGA_SEQ_I, 0x0c, 0xfb);
++	data--;
++	xgi_set(priv, VGA_CRT_IC, 0x05, data | data1);
++	data = (xgi_get(priv, VGA_SEQ_I, 0x0e) >> 5) + 3;
++	if (data > 7)
++		data -= 7;
++	xgi_and_or(priv, VGA_SEQ_I, 0x0e, ~0xe0, data << 5);
++
++	for (i = 0; i <= 1; i++)
++		xgi_set(priv, VGA_CRT_IC, i + 6, t[8 + i]);
++	for (i = 2; i <= 3; i++)
++		xgi_set(priv, VGA_CRT_IC, i + 0x0e, t[8 + i]);
++	for (i = 4; i <= 5; i++)
++		xgi_set(priv, VGA_CRT_IC, i + 0x11, t[8 + i]);
++	xgi_and_or(priv, VGA_SEQ_I, 0x0a, 0xc0, t[14] & 0x3f);
++
++	data = (t[14] & 0x80) >> 2;
++	if (priv->ext->mode_flag & DOUBLE_SCAN_MODE)
++		data |= 0x80;
++	xgi_and_or(priv, VGA_CRT_IC, 0x09, 0x5f, data);
++
++	if (priv->mode_type > 0x03)
++		xgi_set(priv, VGA_CRT_IC, 0x14, 0x4f);
++}
++
++static void xgi_set_crt1_de(struct xgi_priv *priv,
++			    const struct xgi_ref_rate *rate)
++{
++	const struct xgi_mode_res *res = &xgi_mode_res[priv->ext->res_info];
++	u16 htotal = res->htotal;
++	u16 vtotal = res->vtotal;
++	u8 cr11;
++
++	if (priv->ext->mode_flag & HALF_DCLK)
++		htotal &= ~1;
++	if (rate->info_flag & INTERLACE_MODE)
++		vtotal >>= 1;
++	if (priv->ext->mode_flag & DOUBLE_SCAN_MODE)
++		vtotal <<= 1;
++	htotal = htotal / 8 - 1;
++	vtotal -= 1;
++
++	cr11 = xgi_get(priv, VGA_CRT_IC, 0x11);
++	xgi_set(priv, VGA_CRT_IC, 0x11, cr11 & 0x7f);
++	xgi_set(priv, VGA_CRT_IC, 0x01, htotal & 0xff);
++	xgi_and_or(priv, VGA_CRT_IC, 0x0b, ~0x0c, (htotal & 0xff00) >> 10);
++	xgi_set(priv, VGA_CRT_IC, 0x12, vtotal & 0xff);
++	vtotal >>= 8;
++	xgi_and_or(priv, VGA_CRT_IC, 0x07, ~0x42,
++		   (vtotal & 0x01 ? 0x02 : 0) | (vtotal & 0x02 ? 0x40 : 0));
++	xgi_and_or(priv, VGA_CRT_IC, 0x0a, ~0x02, vtotal & 0x04 ? 0x02 : 0);
++	xgi_set(priv, VGA_CRT_IC, 0x11, cr11);
++}
++
++static void xgi_set_crt1_offset(struct xgi_priv *priv,
++				const struct xgi_ref_rate *rate)
++{
++	u16 offset, scale, unit;
++	u8 high;
++
++	offset = xgi_screen_offset[priv->ext->mode_info >> 8];
++	if (rate->info_flag & INTERLACE_MODE)
++		offset <<= 1;
++
++	scale = priv->mode_type - MODE_EGA;
++	switch (scale) {
++	case 0:
++		scale = 1;
++		break;
++	case 1:
++		scale = 2;
++		break;
++	case 2:
++	case 3:
++		scale = 4;
++		break;
++	case 4:
++		scale = 6;
++		break;
++	case 5:
++		scale = 8;
++		break;
++	}
++
++	if (priv->mode_no >= 0x26 && priv->mode_no <= 0x28)
++		offset = offset * scale + scale / 2;
++	else
++		offset *= scale;
++
++	xgi_and_or(priv, VGA_SEQ_I, 0x0e, 0xf0, (offset >> 8) & 0x0f);
++	xgi_set(priv, VGA_CRT_IC, 0x13, offset & 0xff);
++
++	unit = offset;
++	if (rate->info_flag & INTERLACE_MODE)
++		unit >>= 1;
++	unit <<= 5;
++	high = (unit >> 8) + ((unit & 0xff) ? 2 : 1);
++	if (priv->mode_no == 0x4a || priv->mode_no == 0x49)
++		high--;
++	xgi_set(priv, VGA_SEQ_I, 0x10, high);
++}
++
++static void xgi_set_crt1_vclk(struct xgi_priv *priv,
++			      const struct xgi_ref_rate *rate)
++{
++	const struct xgi_vclk *vclk = &xgi_vclks[rate->crt_vclk];
++	u8 data;
++
++	xgi_and(priv, VGA_SEQ_I, 0x31, 0xcf);
++	xgi_set(priv, VGA_SEQ_I, 0x2b, vclk->sr2b);
++	xgi_set(priv, VGA_SEQ_I, 0x2c, vclk->sr2c);
++	xgi_set(priv, VGA_SEQ_I, 0x2d, 0x01);
++
++	if (priv->ext->mode_flag & HALF_DCLK) {
++		xgi_set(priv, VGA_SEQ_I, 0x2b, xgi_get(priv, VGA_SEQ_I, 0x2b));
++		data = xgi_get(priv, VGA_SEQ_I, 0x2c);
++		data = (data & 0xe0) | (((data & 0x1f) << 1) + 1);
++		xgi_set(priv, VGA_SEQ_I, 0x2c, data);
++	}
++}
++
++/* sync and display timings of the XG27 digital output */
++static void xgi_set_xg27_crtc(struct xgi_priv *priv,
++			      const struct xgi_ref_rate *rate)
++{
++	const u8 *t = xgi_crt1_timings[rate->crt1_crtc].cr;
++	u16 hrs, hre, vrs, vre;
++
++	hrs = t[3] | (t[5] & 0xc0) << 2;
++	hre = (t[4] & 0x1f) | (t[6] & 0x04) << 3;
++	xgi_set(priv, VGA_SEQ_I, 0x2e, t[3]);
++	hrs = (hrs & 0x3c0) | hre;
++	if (hre <= (t[3] & 0x3f))
++		hrs += 0x40;
++	xgi_set(priv, VGA_SEQ_I, 0x2f, (t[5] & 0xc0) >> 6 | ((hrs << 2) & 0xff));
++	xgi_and(priv, VGA_SEQ_I, 0x30, 0xe3);
++
++	xgi_set(priv, VGA_SEQ_I, 0x34, t[10]);
++	xgi_and_or(priv, VGA_SEQ_I, 0x35, ~0x01, (t[9] & 0x04) >> 2);
++	vrs = t[10] | (t[9] & 0x04) << 6 | (t[9] & 0x80) << 2 |
++	      (t[14] & 0x08) << 7;
++	vre = (t[11] & 0x0f) | (t[14] & 0x20) >> 1;
++	vre |= vrs & 0x7e0;
++	if (vre <= vrs)
++		vre |= 0x20;
++	xgi_and_or(priv, VGA_SEQ_I, 0x3f, ~0xfc, (vre << 2) & 0xff);
++	xgi_and_or(priv, VGA_SEQ_I, 0x35, ~0x07, vrs >> 8);
++}
++
++static void xgi_fix_crt1(struct xgi_priv *priv,
++			 const struct xgi_ref_rate *rate)
++{
++	const struct xgi_crt1_fix *fix;
++	int i;
++
++	xgi_and(priv, VGA_CRT_IC, 0x11, 0x7f);
++
++	for (i = 0; i < ARRAY_SIZE(xgi_crt1_fixes); i++) {
++		fix = &xgi_crt1_fixes[i];
++		if (fix->mode_id != priv->mode_no ||
++		    (fix->crt1_crtc != 0xff && fix->crt1_crtc != rate->crt1_crtc))
++			continue;
++
++		xgi_set(priv, VGA_CRT_IC, 0x02, fix->cr02);
++		xgi_set(priv, VGA_CRT_IC, 0x03, fix->cr03);
++		xgi_set(priv, VGA_CRT_IC, 0x15, fix->cr15);
++		xgi_set(priv, VGA_CRT_IC, 0x16, fix->cr16);
++		break;
++	}
++}
++
++static void xgi_set_digital_out(struct xgi_priv *priv,
++				const struct xgi_ref_rate *rate)
++{
++	u8 cr37;
++
++	xgi_set(priv, VGA_CRT_IC, 0x2e, 0x00);
++	xgi_set(priv, VGA_CRT_IC, 0x2f, 0x00);
++	xgi_set(priv, VGA_CRT_IC, 0x46, 0x00);
++	xgi_set(priv, VGA_CRT_IC, 0x47, 0x00);
++
++	cr37 = xgi_get(priv, VGA_CRT_IC, 0x37);
++	if (!(cr37 & 0x03)) {
++		xgi_set(priv, VGA_CRT_IC, 0x46, 0x13);
++		xgi_set(priv, VGA_CRT_IC, 0x47, 0x13);
++	}
++
++	/* CR37[1:0]: 0 dual 12 bit, 1 18 bit, 2 single 24 bit */
++	cr37 = (xgi_get(priv, VGA_CRT_IC, 0x37) & 0x03) << 6;
++	xgi_and_or(priv, VGA_SEQ_I, 0x06, ~0xc0, cr37 & 0x80);
++	xgi_and_or(priv, VGA_SEQ_I, 0x09, ~0xc0, cr37 | 0x80);
++
++	xgi_or(priv, VGA_SEQ_I, 0x1e, 0x01);
++
++	xgi_and(priv, VGA_SEQ_I, 0x30, ~0x20);
++	xgi_and(priv, VGA_SEQ_I, 0x35, ~0x80);
++	if (rate->info_flag & HSYNC_NEGATIVE)
++		xgi_or(priv, VGA_SEQ_I, 0x30, 0x20);
++	if (rate->info_flag & VSYNC_NEGATIVE)
++		xgi_or(priv, VGA_SEQ_I, 0x35, 0x80);
++}
++
++static void xgi_set_crt1_fifo(struct xgi_priv *priv)
++{
++	xgi_and(priv, VGA_SEQ_I, 0x3d, 0xfe);
++	xgi_set(priv, VGA_SEQ_I, 0x08, 0x34);
++	xgi_and_or(priv, VGA_SEQ_I, 0x09, 0xc0, 0x30);
++	xgi_or(priv, VGA_SEQ_I, 0x3d, 0x01);
++}
++
++static void xgi_set_crt1_mode_regs(struct xgi_priv *priv,
++				   const struct xgi_ref_rate *rate)
++{
++	u16 flag = priv->ext->mode_flag;
++	u16 xres = xgi_mode_res[priv->ext->res_info].htotal;
++	u8 data;
++
++	if (xgi_get(priv, VGA_CRT_IC, 0x31) & 0x01)
++		xgi_and(priv, VGA_SEQ_I, 0x1f, 0x3f);
++
++	data = 0x02 | (priv->mode_type - MODE_VGA) << 2;
++	if (rate->info_flag & INTERLACE_MODE)
++		data |= 0x20;
++	xgi_and_or(priv, VGA_SEQ_I, 0x06, ~0x3f, data);
++
++	data = 0;
++	if (rate->info_flag & INTERLACE_MODE) {
++		if (xres == 1024)
++			data = 0x35;
++		else if (xres == 1280)
++			data = 0x48;
++	}
++	xgi_or(priv, VGA_CRT_IC, 0x19, data);
++	xgi_and(priv, VGA_CRT_IC, 0x19, 0xfc);
++
++	if (flag & HALF_DCLK)
++		xgi_and_or(priv, VGA_SEQ_I, 0x01, 0xf7, 0x08);
++	xgi_and_or(priv, VGA_SEQ_I, 0x0f, ~0x48,
++		   flag & LINE_COMPARE_OFF ? 0x08 : 0);
++	xgi_and_or(priv, VGA_SEQ_I, 0x21, 0x1f, 0xa0);
++
++	data = xgi_get(priv, VGA_SEQ_I, 0x32) & 0xf3;
++	if (xgi_vclks[rate->crt_vclk].clock >= 200)
++		data |= 0x0c;
++	xgi_set(priv, VGA_SEQ_I, 0x32, data & ~0x04);
++	xgi_and(priv, VGA_SEQ_I, 0x07, 0xfc);
++	xgi_and(priv, VGA_SEQ_I, 0x40, 0xfc);
++
++	if (xgi_get(priv, VGA_CRT_IC, 0x31) & 0x40)
++		xgi_set(priv, VGA_CRT_IC, 0x52, 0x2c);
++	else
++		xgi_set(priv, VGA_CRT_IC, 0x52, 0x6c);
++	xgi_or(priv, VGA_CRT_IC, 0x51, 0x10);
++}
++
++static void xgi_write_dac(struct xgi_priv *priv, int dl, u8 ah, u8 al, u8 dh)
++{
++	u8 bh = ah, bl = al, tmp;
++
++	if (dl) {
++		tmp = bh;
++		bh = dh;
++		dh = tmp;
++		if (dl == 1) {
++			tmp = bl;
++			bl = dh;
++			dh = tmp;
++		} else {
++			tmp = bl;
++			bl = bh;
++			bh = tmp;
++		}
++	}
++	xgi_out(priv, VGA_PEL_D, dh);
++	xgi_out(priv, VGA_PEL_D, bh);
++	xgi_out(priv, VGA_PEL_D, bl);
++}
++
++static void xgi_load_dac(struct xgi_priv *priv)
++{
++	const u8 *t = xgi_vga_dac;
++	int i, k, m, n, o, si, di, bx;
++	u8 data, val;
++
++	xgi_out(priv, VGA_PEL_MSK, 0xff);
++	xgi_out(priv, VGA_PEL_IW, 0x00);
++
++	for (i = 0; i < 16; i++) {
++		data = t[i];
++		for (k = 0; k < 3; k++) {
++			val = 0;
++			if (data & 0x01)
++				val = 0x2a;
++			if (data & 0x02)
++				val += 0x15;
++			xgi_out(priv, VGA_PEL_D, val);
++			data >>= 2;
++		}
++	}
++
++	for (i = 16; i < 32; i++)
++		for (k = 0; k < 3; k++)
++			xgi_out(priv, VGA_PEL_D, t[i]);
++
++	si = 32;
++	for (m = 0; m < 9; m++) {
++		di = si;
++		bx = si + 4;
++		for (n = 0; n < 3; n++) {
++			for (o = 0; o < 5; o++, si++)
++				xgi_write_dac(priv, n, t[di], t[bx], t[si]);
++			si -= 2;
++			for (o = 0; o < 3; o++, si--)
++				xgi_write_dac(priv, n, t[di], t[si], t[bx]);
++		}
++		si += 5;
++	}
++}
++
++static void xgi_set_crt1(struct xgi_priv *priv)
++{
++	const struct xgi_ref_rate *rate;
++
++	xgi_set_std_regs(priv);
++	if (!priv->lvds)
++		xgi_set_default_vclk(priv);
++
++	rate = xgi_find_rate(priv);
++	xgi_out(priv, VGA_MIS_W, 0x2f | ((rate->info_flag >> 8) & 0xc0));
++	xgi_set_crt1_crtc(priv, rate);
++	xgi_set_crt1_de(priv, rate);
++	xgi_set_crt1_offset(priv, rate);
++	xgi_set_crt1_vclk(priv, rate);
++
++	if (xgi_get(priv, VGA_CRT_IC, 0x38) & 0xa0) {
++		xgi_set_xg27_crtc(priv, rate);
++		xgi_fix_crt1(priv, rate);
++		xgi_set_digital_out(priv, rate);
++	}
++
++	xgi_set_crt1_fifo(priv);
++	xgi_set_crt1_mode_regs(priv, rate);
++	xgi_load_dac(priv);
++}
++
++static int xgi_set_mode_no(struct xgi_priv *priv, u8 mode_no)
++{
++	const struct xgi_ext_mode *ext;
++
++	priv->lvds = (xgi_get(priv, VGA_CRT_IC, 0x38) & 0xe0) == 0xc0 &&
++		     (xgi_get(priv, VGA_CRT_IC, 0x30) & 0x20);
++	if (priv->lvds)
++		log_warning("LVDS panels are not supported\n");
++
++	xgi_set(priv, VGA_SEQ_I, 0x05, XGI_PASSWORD);
++
++	for (ext = xgi_ext_modes; ext->mode_id != mode_no; ext++)
++		if (ext->mode_id == 0xff)
++			return -EINVAL;
++
++	priv->ext = ext;
++	priv->mode_no = mode_no;
++	priv->mode_type = ext->mode_flag & MODE_TYPE_MASK;
++
++	xgi_display_off(priv);
++	xgi_set_crt1(priv);
++	xgi_display_on(priv);
++
++	return 0;
++}
++
++static void xgi_set_memory_clock(struct xgi_priv *priv)
++{
++	const struct xgi_mclk *mclk = &xg27_mclk[priv->ram_type];
++	const struct xgi_eclk *eclk = &xg27_eclk[priv->ram_type];
++
++	xgi_set(priv, VGA_SEQ_I, 0x28, mclk->sr28);
++	xgi_set(priv, VGA_SEQ_I, 0x29, mclk->sr29);
++	xgi_set(priv, VGA_SEQ_I, 0x2a, mclk->sr2a);
++	xgi_set(priv, VGA_SEQ_I, 0x2e, eclk->sr2e);
++	xgi_set(priv, VGA_SEQ_I, 0x2f, eclk->sr2f);
++	xgi_set(priv, VGA_SEQ_I, 0x30, eclk->sr30);
++}
++
++static void xgi_dram_cmd(struct xgi_priv *priv, u8 sr18, u8 sr19, u8 sr16)
++{
++	xgi_set(priv, VGA_SEQ_I, 0x18, sr18);
++	xgi_set(priv, VGA_SEQ_I, 0x19, sr19);
++	xgi_set(priv, VGA_SEQ_I, 0x16, sr16);
++}
++
++static void xgi_ddr1_init(struct xgi_priv *priv)
++{
++	u8 sr18 = xg27_sr18[priv->ram_type];
++
++	xgi_set_memory_clock(priv);
++	xgi_set(priv, VGA_CRT_IC, 0x82, xg27_cr40[11][priv->ram_type]);
++	xgi_set(priv, VGA_CRT_IC, 0x85, xg27_cr40[12][priv->ram_type]);
++	xgi_set(priv, VGA_CRT_IC, 0x86, xg27_cr40[13][priv->ram_type]);
++	xgi_set(priv, VGA_CRT_IC, 0x98, 0x01);
++	xgi_set(priv, VGA_CRT_IC, 0x9a, 0x02);
++
++	xgi_dram_cmd(priv, 0x01, 0x40, 0x00);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0x80);
++	udelay(60);
++	xgi_dram_cmd(priv, 0x00, 0x40, 0x00);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0x80);
++	udelay(60);
++	xgi_dram_cmd(priv, sr18, 0x01, 0x03);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0x83);
++	udelay(1);
++	xgi_set(priv, VGA_SEQ_I, 0x1b, 0x03);
++	udelay(500);
++	xgi_dram_cmd(priv, sr18, 0x00, 0x03);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0x83);
++	xgi_set(priv, VGA_SEQ_I, 0x1b, 0x00);
++}
++
++static void xgi_ddr2_init(struct xgi_priv *priv)
++{
++	/* keep the sequence, the dummy reads give the controller idle time */
++	xgi_set(priv, VGA_CRT_IC, 0x82, 0x77);
++	xgi_set(priv, VGA_CRT_IC, 0x86, 0x00);
++	xgi_get(priv, VGA_CRT_IC, 0x86);
++	xgi_set(priv, VGA_CRT_IC, 0x86, 0x88);
++	xgi_get(priv, VGA_CRT_IC, 0x86);
++	xgi_set(priv, VGA_CRT_IC, 0x86, xg27_cr40[13][priv->ram_type]);
++	xgi_set(priv, VGA_CRT_IC, 0x82, 0x77);
++	xgi_set(priv, VGA_CRT_IC, 0x85, 0x00);
++	xgi_get(priv, VGA_CRT_IC, 0x85);
++	xgi_set(priv, VGA_CRT_IC, 0x85, 0x88);
++	xgi_get(priv, VGA_CRT_IC, 0x85);
++	xgi_set(priv, VGA_CRT_IC, 0x85, xg27_cr40[12][priv->ram_type]);
++	xgi_set(priv, VGA_CRT_IC, 0x82, xg27_cr40[11][priv->ram_type]);
++	xgi_set(priv, VGA_CRT_IC, 0x98, 0x01);
++	xgi_set(priv, VGA_CRT_IC, 0x9a, 0x02);
++
++	xgi_set_memory_clock(priv);
++	xgi_set(priv, VGA_CRT_IC, 0x97, priv->cr97);
++	udelay(200);
++
++	/* EMRS2 */
++	xgi_dram_cmd(priv, 0x00, 0x80, 0x20);
++	udelay(15);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0xa0);
++	udelay(15);
++	/* EMRS3 */
++	xgi_dram_cmd(priv, 0x00, 0xc0, 0x20);
++	udelay(15);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0xa0);
++	udelay(15);
++	/* EMRS1 */
++	xgi_dram_cmd(priv, 0x00, 0x40, 0x20);
++	udelay(30);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0xa0);
++	udelay(15);
++	/* MRS, DLL enable */
++	xgi_dram_cmd(priv, 0x42, 0x0a, 0x00);
++	udelay(30);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0x00);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0x80);
++
++	xgi_set(priv, VGA_SEQ_I, 0x1b, 0x04);
++	udelay(60);
++	xgi_set(priv, VGA_SEQ_I, 0x1b, 0x00);
++
++	/* MRS, DLL reset */
++	xgi_dram_cmd(priv, 0x42, 0x08, 0x00);
++	udelay(30);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0x83);
++	udelay(15);
++	/* MRS, ODT */
++	xgi_dram_cmd(priv, 0x80, 0x46, 0x20);
++	udelay(30);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0xa0);
++	udelay(15);
++	/* EMRS */
++	xgi_dram_cmd(priv, 0x00, 0x40, 0x20);
++	udelay(30);
++	xgi_set(priv, VGA_SEQ_I, 0x16, 0xa0);
++	udelay(15);
++
++	/* refresh on */
++	xgi_set(priv, VGA_SEQ_I, 0x1b, 0x04);
++	udelay(200);
++}
++
++static void xgi_dram_delays(struct xgi_priv *priv, u8 reg, u8 seed, u8 val,
++			    u8 shift, u8 mask, u8 step)
++{
++	int j;
++
++	for (j = 0; j < 4; j++) {
++		val |= ((seed >> (2 * j)) & 0x03) << shift;
++		xgi_set(priv, VGA_CRT_IC, reg, val);
++		xgi_get(priv, VGA_CRT_IC, reg);
++		val &= mask;
++		val += step;
++	}
++}
++
++static void xgi_dram_default_regs(struct xgi_priv *priv)
++{
++	int rt = priv->ram_type;
++	u8 val;
++	int i;
++
++	xgi_set(priv, VGA_CRT_IC, 0x6d, xg27_cr40[8][rt]);
++	xgi_set(priv, VGA_CRT_IC, 0x68, xg27_cr40[5][rt]);
++	xgi_set(priv, VGA_CRT_IC, 0x69, xg27_cr40[6][rt]);
++	xgi_set(priv, VGA_CRT_IC, 0x6a, xg27_cr40[7][rt]);
++
++	/* DQS and DQM fine tune delays */
++	xgi_dram_delays(priv, 0x6b, 0xaa, 0, 2, 0xf0, 0x10);
++	xgi_dram_delays(priv, 0x6e, 0, 0, 2, 0xf0, 0x10);
++	for (i = 0; i < 4; i++) {
++		xgi_and_or(priv, VGA_CRT_IC, 0x6e, 0xfc, i);
++		xgi_dram_delays(priv, 0x6f, 0, 0, 0, 0xf8, 0x08);
++	}
++
++	xgi_set(priv, VGA_CRT_IC, 0x80, xg27_cr40[9][rt]);
++	xgi_set(priv, VGA_CRT_IC, 0x81, xg27_cr40[10][rt]);
++
++	/* terminator type */
++	xgi_dram_delays(priv, 0x89, 0, 0x80, 0, 0xf0, 0x10);
++	xgi_set(priv, VGA_CRT_IC, 0x89, 0x80);
++
++	val = xg27_cr40[3][rt];
++	xgi_set(priv, VGA_CRT_IC, 0x45, val & 0x0f);
++	xgi_set(priv, VGA_CRT_IC, 0x99, (val >> 4) & 0x07);
++	xgi_or(priv, VGA_CRT_IC, 0x40, val & 0x80);
++	xgi_set(priv, VGA_CRT_IC, 0x41, xg27_cr40[0][rt]);
++	xgi_set(priv, VGA_CRT_IC, 0x8f, 0x0c);
++
++	for (i = 0; i <= 6; i++)
++		xgi_set(priv, VGA_CRT_IC, 0x90 + i, xg27_cr40[14 + i][rt]);
++	for (i = 0; i <= 2; i++)
++		xgi_set(priv, VGA_CRT_IC, 0xc3 + i, xg27_cr40[21 + i][rt]);
++	for (i = 0; i < 2; i++)
++		xgi_set(priv, VGA_CRT_IC, 0x8a + i, xg27_cr40[1 + i][rt]);
++
++	xgi_set(priv, VGA_CRT_IC, 0x59, xg27_cr40[4][rt]);
++	xgi_set(priv, VGA_CRT_IC, 0x83, 0x09);
++	xgi_set(priv, VGA_CRT_IC, 0x87, 0x00);
++	xgi_set(priv, VGA_CRT_IC, 0xcf, 0x13);
++
++	if (rt) {
++		xgi_set(priv, VGA_SEQ_I, 0x17, 0x80);
++		xgi_set(priv, VGA_SEQ_I, 0x17, 0x02);
++	} else {
++		xgi_set(priv, VGA_SEQ_I, 0x17, 0x00);
++	}
++	xgi_set(priv, VGA_SEQ_I, 0x1a, 0x87);
++
++	if (rt) {
++		xgi_set(priv, VGA_CRT_IC, 0xb0, 0x80);
++		xgi_ddr2_init(priv);
++	} else {
++		xgi_ddr1_init(priv);
++	}
++	xgi_set(priv, VGA_SEQ_I, 0x1b, 0x03);
++}
++
++static bool xgi_vram_test(struct xgi_priv *priv, int stop, int start)
++{
++	int i;
++
++	writel(0, priv->fb);
++	for (i = start; i <= stop; i++)
++		writel(BIT(i), priv->fb + BIT(i));
++
++	udelay(500);
++
++	if (readl(priv->fb))
++		return false;
++	for (i = start; i <= stop; i++)
++		if (readl(priv->fb + BIT(i)) != BIT(i))
++			return false;
++
++	return true;
++}
++
++static void xgi_dram_sizing(struct xgi_priv *priv)
++{
++	const struct xgi_dram_type *type;
++	int bits, rank, i;
++
++	xgi_set(priv, VGA_SEQ_I, 0x15, 0x00);
++	xgi_set(priv, VGA_SEQ_I, 0x1c, 0x00);
++	xgi_set(priv, VGA_SEQ_I, 0x14, 0x51);
++
++	for (i = 0; i < ARRAY_SIZE(xgi_dram_types); i++) {
++		type = &xgi_dram_types[i];
++		xgi_and_or(priv, VGA_SEQ_I, 0x13, 0x80, type->sr13);
++		udelay(50);
++
++		rank = type->size * 16 / 8;
++		if (xgi_get(priv, VGA_SEQ_I, 0x13) & 0x80)
++			rank *= 2;
++		if (rank > 256)
++			continue;
++
++		bits = 0;
++		while ((rank >>= 1) > 0)
++			bits++;
++		xgi_and_or(priv, VGA_SEQ_I, 0x14, 0x0f, bits << 4);
++		udelay(15);
++		if (!bits)
++			continue;
++
++		bits += 19;
++		if (priv->fb_size - 1 < BIT(bits))
++			continue;
++
++		if (xgi_vram_test(priv, bits, 5))
++			return;
++	}
++}
++
++static void xgi_chk_sense_status(struct xgi_priv *priv)
++{
++	u8 cr32 = xgi_get(priv, VGA_CRT_IC, 0x32);
++	u16 active = 0, mask;
++
++	if (cr32 & MONITOR1_SENSE)
++		active |= ACTIVE_CRT1;
++	if (cr32 & LCD_SENSE)
++		active |= ACTIVE_LCD;
++	if (cr32 & MONITOR2_SENSE)
++		active |= ACTIVE_CRT2;
++	if (cr32 & TV_SENSE) {
++		active |= ACTIVE_TV;
++		if (cr32 & AVIDEO_SENSE)
++			active |= ACTIVE_AVIDEO;
++		if (cr32 & SVIDEO_SENSE)
++			active |= ACTIVE_SVIDEO;
++		if (cr32 & SCART_SENSE)
++			active |= ACTIVE_SCART;
++		if (cr32 & HITV_SENSE)
++			active |= ACTIVE_HITV;
++		if (cr32 & YPBPR_SENSE)
++			active |= ACTIVE_YPBPR;
++	}
++
++	mask = xgi_get(priv, VGA_CRT_IC, 0x3d) |
++	       xgi_get(priv, VGA_CRT_IC, 0x3e) << 8;
++	if (!(active & mask) ||
++	    !(xgi_get(priv, VGA_CRT_IC, 0x3c) & DISPLAY_FROM_CMOS))
++		mask = 0x1ff0;
++
++	active &= mask;
++	xgi_set(priv, VGA_CRT_IC, 0x3d, active & 0xff);
++	xgi_set(priv, VGA_CRT_IC, 0x3e, active >> 8);
++}
++
++static u16 xgi_tv_outputs(u16 active)
++{
++	u16 cr30 = 0;
++
++	if (active & ACTIVE_AVIDEO)
++		cr30 |= SET_CRT2_TO_AVIDEO;
++	if (active & ACTIVE_SVIDEO)
++		cr30 |= SET_CRT2_TO_SVIDEO;
++	if (active & ACTIVE_SCART)
++		cr30 |= SET_CRT2_TO_SCART;
++
++	return cr30;
++}
++
++static void xgi_set_mode_scratch(struct xgi_priv *priv)
++{
++	u16 active, cr30 = 0;
++	u8 cr31, cr38 = 0;
++
++	active = xgi_get(priv, VGA_CRT_IC, 0x3d) |
++		 xgi_get(priv, VGA_CRT_IC, 0x3e) << 8 |
++		 (xgi_get(priv, VGA_CRT_IC, 0x31) & (DRIVER_MODE >> 8)) << 8;
++
++	if (active & ACTIVE_LCD) {
++		cr30 |= SET_CRT2_TO_LCD;
++		if ((active & DRIVER_MODE) && (active & ACTIVE_TV)) {
++			cr38 = SET_TO_LCDA | ENABLE_DUAL_EDGE;
++			active ^= SET_CRT2_TO_LCD;
++			cr30 |= xgi_tv_outputs(active);
++		}
++	} else {
++		cr30 |= xgi_tv_outputs(active);
++	}
++
++	cr30 |= SET_SIMU_SCAN_MODE;
++	if (!(active & ACTIVE_CRT1) &&
++	    (active & (ACTIVE_LCD | ACTIVE_TV | ACTIVE_CRT2)))
++		cr30 ^= SET_SIMU_SCAN_MODE | SWITCH_CRT2;
++	if ((active & ACTIVE_LCD) && (active & ACTIVE_TV))
++		cr30 ^= SET_SIMU_SCAN_MODE | SWITCH_CRT2;
++	xgi_set(priv, VGA_CRT_IC, 0x30, cr30);
++
++	cr31 = xgi_get(priv, VGA_CRT_IC, 0x31);
++	cr31 &= ~(SET_NOT_SIMU_MODE >> 8);
++	if (!(active & ACTIVE_CRT1))
++		cr31 |= SET_NOT_SIMU_MODE >> 8;
++	cr31 &= ~(DISABLE_CRT2_DISPLAY >> 8);
++	if (!(active & (ACTIVE_LCD | ACTIVE_TV | ACTIVE_CRT2)))
++		cr31 |= DISABLE_CRT2_DISPLAY >> 8;
++	xgi_set(priv, VGA_CRT_IC, 0x31, cr31);
++
++	xgi_and_or(priv, VGA_CRT_IC, 0x38, ~SET_YPBPR, cr38);
++}
++
++/* XG27 GPIO A-C straps tell an LVDS panel from TMDS/DVO */
++static void xgi_sense_outputs(struct xgi_priv *priv)
++{
++	u8 cr4a = xgi_get(priv, VGA_CRT_IC, 0x4a);
++	u8 straps;
++
++	xgi_and_or(priv, VGA_CRT_IC, 0x4a, ~0x07, 0x07);
++	straps = xgi_get(priv, VGA_CRT_IC, 0x48) & 0x07;
++	xgi_set(priv, VGA_CRT_IC, 0x4a, cr4a);
++
++	if (straps <= 0x02) {
++		xgi_and_or(priv, VGA_CRT_IC, 0x38, ~0xe0, 0xc0);
++		xgi_set(priv, VGA_CRT_IC, 0x30, 0x21);
++	} else {
++		xgi_and_or(priv, VGA_CRT_IC, 0x38, ~0xe0, 0xa0);
++	}
++	xgi_or(priv, VGA_CRT_IC, 0x32, LCD_SENSE);
++}
++
++static u8 xgi_fp_bits(struct xgi_priv *priv)
++{
++	u8 cr4a = xgi_get(priv, VGA_CRT_IC, 0x4a);
++	u8 val;
++
++	xgi_and_or(priv, VGA_CRT_IC, 0x4a, ~0x03, 0x03);
++	val = xgi_get(priv, VGA_CRT_IC, 0x48);
++	if (val > 2)
++		val = ((val & 0x04) >> 1) | (~val & 0x01);
++	xgi_set(priv, VGA_CRT_IC, 0x4a, cr4a);
++
++	return val;
++}
++
++/* DAC load test on CRT1, the result lands in CR32[5] */
++static void xgi_sense_crt1(struct xgi_priv *priv)
++{
++	static const u8 crtc[17] = {
++		0x5f, 0x4f, 0x50, 0x82, 0x55, 0x81, 0x0b, 0x3e,
++		0xe9, 0x0b, 0xdf, 0xe7, 0x04, 0x00, 0x00, 0x05,
++		0x00
++	};
++	u8 sr01, sr1f, sr07, sr06, sr31, cr17, cr63;
++	int i;
++
++	xgi_set(priv, VGA_SEQ_I, 0x05, XGI_PASSWORD);
++	xgi_set(priv, VGA_CRT_IC, 0x57, 0x4a);
++	xgi_or(priv, VGA_CRT_IC, 0x53, 0x02);
++
++	sr31 = xgi_get(priv, VGA_SEQ_I, 0x31);
++	cr63 = xgi_get(priv, VGA_CRT_IC, 0x63);
++	sr01 = xgi_get(priv, VGA_SEQ_I, 0x01);
++	xgi_set(priv, VGA_SEQ_I, 0x01, sr01 & 0xdf);
++	xgi_set(priv, VGA_CRT_IC, 0x63, cr63 & 0xbf);
++
++	cr17 = xgi_get(priv, VGA_CRT_IC, 0x17);
++	xgi_set(priv, VGA_CRT_IC, 0x17, cr17 | 0x80);
++	sr1f = xgi_get(priv, VGA_SEQ_I, 0x1f);
++	xgi_set(priv, VGA_SEQ_I, 0x1f, sr1f | 0x04);
++	sr07 = xgi_get(priv, VGA_SEQ_I, 0x07);
++	xgi_set(priv, VGA_SEQ_I, 0x07, sr07 & 0xfb);
++	sr06 = xgi_get(priv, VGA_SEQ_I, 0x06);
++	xgi_set(priv, VGA_SEQ_I, 0x06, sr06 & 0xc3);
++
++	xgi_set(priv, VGA_CRT_IC, 0x11, 0x00);
++	for (i = 0; i < 8; i++)
++		xgi_set(priv, VGA_CRT_IC, i, crtc[i]);
++	for (i = 8; i < 11; i++)
++		xgi_set(priv, VGA_CRT_IC, i + 8, crtc[i]);
++	for (i = 11; i < 13; i++)
++		xgi_set(priv, VGA_CRT_IC, i + 4, crtc[i]);
++	for (i = 13; i < 16; i++)
++		xgi_set(priv, VGA_SEQ_I, i - 3, crtc[i]);
++	xgi_set(priv, VGA_SEQ_I, 0x0e, crtc[16] & 0xe0);
++
++	xgi_set(priv, VGA_SEQ_I, 0x31, 0x00);
++	xgi_set(priv, VGA_SEQ_I, 0x2b, 0x1b);
++	xgi_set(priv, VGA_SEQ_I, 0x2c, 0xe1);
++
++	xgi_out(priv, VGA_PEL_IW, 0x00);
++	for (i = 0; i < 256 * 3; i++)
++		xgi_out(priv, VGA_PEL_D, 0x0f);
++
++	mdelay(1);
++
++	xgi_in(priv, VGA_IS1_RC);
++	xgi_in(priv, VGA_IS1_RC);
++	if (xgi_in(priv, VGA_IS0_R) & 0x10)
++		xgi_and_or(priv, VGA_CRT_IC, 0x32, 0xdf, 0x20);
++	else
++		xgi_and(priv, VGA_CRT_IC, 0x32, 0xdf);
++
++	xgi_out(priv, VGA_PEL_IW, 0x00);
++	for (i = 0; i < 256 * 3; i++)
++		xgi_out(priv, VGA_PEL_D, 0x00);
++
++	xgi_set(priv, VGA_SEQ_I, 0x01, sr01);
++	xgi_set(priv, VGA_CRT_IC, 0x63, cr63);
++	xgi_set(priv, VGA_SEQ_I, 0x31, sr31);
++	xgi_and(priv, VGA_CRT_IC, 0x53, 0xfd);
++	xgi_set(priv, VGA_SEQ_I, 0x1f, sr1f);
++}
++
++static int xgi_post(struct xgi_priv *priv)
++{
++	int ret, i;
++
++	xgi_out(priv, VGA_MIS_W, 0x67);
++	priv->cr97 = xgi_strapped_ddr(priv) ? 0x80 : 0xc1;
++	xgi_set(priv, VGA_SEQ_I, 0x05, XGI_PASSWORD);
++	xgi_sense_outputs(priv);
++
++	for (i = 0x06; i < 0x20; i++)
++		xgi_set(priv, VGA_SEQ_I, i, 0);
++	for (i = 0x21; i <= 0x27; i++)
++		xgi_set(priv, VGA_SEQ_I, i, 0);
++	for (i = 0x31; i <= 0x3b; i++)
++		xgi_set(priv, VGA_SEQ_I, i, 0);
++	for (i = 0x79; i <= 0x7c; i++)
++		xgi_set(priv, VGA_CRT_IC, i, 0);
++	xgi_set(priv, VGA_CRT_IC, 0x97, priv->cr97);
++
++	xgi_set(priv, VGA_SEQ_I, 0x07, 0x18);
++	xgi_set(priv, VGA_SEQ_I, 0x40, 0x04);
++	xgi_set(priv, VGA_SEQ_I, 0x41, 0x00);
++	xgi_set(priv, VGA_SEQ_I, 0x11, 0x0f);
++	xgi_set(priv, VGA_SEQ_I, 0x1f, 0x00);
++	xgi_set(priv, VGA_SEQ_I, 0x20, 0xa0);
++	xgi_set(priv, VGA_SEQ_I, 0x36, 0x70);
++	xgi_set(priv, VGA_SEQ_I, 0x36, 0x30);
++	xgi_set(priv, VGA_SEQ_I, 0x23, 0xf6);
++	xgi_set(priv, VGA_SEQ_I, 0x24, 0x0d);
++	xgi_set(priv, VGA_SEQ_I, 0x25, 0x00);
++	xgi_set(priv, VGA_SEQ_I, 0x27, 0x1f);
++	xgi_set(priv, VGA_SEQ_I, 0x31, 0xc0);
++	xgi_set(priv, VGA_SEQ_I, 0x32, 0x11);
++	xgi_set(priv, VGA_SEQ_I, 0x33, 0x00);
++
++	xgi_sense_crt1(priv);
++	xgi_or(priv, VGA_CRT_IC, 0x32, MONITOR1_SENSE);
++	xgi_and_or(priv, VGA_CRT_IC, 0x37, ~0x03, xgi_fp_bits(priv));
++
++	priv->ram_type = xgi_strapped_ddr(priv) ? 0 : 1;
++	xgi_dram_default_regs(priv);
++
++	ret = xgi_set_mode_no(priv, 0x2e);
++	if (ret)
++		return ret;
++	xgi_and(priv, VGA_SEQ_I, 0x21, 0xdf);
++	xgi_display_off(priv);
++	xgi_dram_sizing(priv);
++	xgi_or(priv, VGA_SEQ_I, 0x21, 0x20);
++
++	xgi_set(priv, VGA_SEQ_I, 0x22, 0xfa);
++	xgi_set(priv, VGA_SEQ_I, 0x21, 0xa3);
++
++	xgi_chk_sense_status(priv);
++	xgi_set_mode_scratch(priv);
++	xgi_set(priv, VGA_CRT_IC, 0x8c, 0x87);
++
++	return 0;
++}
++
++static int xgi_set_mode(struct xgi_priv *priv, const struct xgi_mode *mode)
++{
++	u16 pitch = mode->xres * mode->bpp / 64;
++	u8 cr31;
++	int ret;
++
++	cr31 = xgi_get(priv, VGA_CRT_IC, 0x31) & ~0x60;
++	xgi_set(priv, VGA_CRT_IC, 0x30, 0x00);
++	xgi_set(priv, VGA_CRT_IC, 0x31, cr31 | 0x60);
++	xgi_set(priv, VGA_CRT_IC, 0x33, mode->rate);
++
++	ret = xgi_set_mode_no(priv, mode->mode_no);
++	if (ret)
++		return ret;
++
++	/* xgifb writes the whole SR0E here, its timing bits end up cleared */
++	xgi_set(priv, VGA_SEQ_I, 0x05, XGI_PASSWORD);
++	xgi_set(priv, VGA_CRT_IC, 0x13, pitch & 0xff);
++	xgi_set(priv, VGA_SEQ_I, 0x0e, pitch >> 8);
++
++	xgi_or(priv, VGA_CRT_IC, 0x17, 0x80);
++	xgi_and(priv, VGA_SEQ_I, 0x07, ~0x04);
++
++	return 0;
++}
++
++/*
++ * xgi-fb in Linux keeps off the I/O BAR and can't read the mode back.
++ * Leave it in the last 4 KiB of VRAM: magic, width, height, bpp, pitch.
++ */
++static void xgi_save_mode(struct xgi_priv *priv, const struct xgi_mode *mode)
++{
++	void __iomem *info = priv->fb + priv->fb_size - XGI_MODE_INFO_SIZE;
++
++	writel(mode->xres, info + 4);
++	writel(mode->yres, info + 8);
++	writel(mode->bpp, info + 12);
++	writel(mode->xres * mode->bpp / 8, info + 16);
++	writel(XGI_MODE_INFO_MAGIC, info);
++}
++
++static int xgi_lookup_mode(struct xgi_mode *mode)
++{
++	const struct xgi_ext_mode *ext;
++	const struct xgi_mode_res *res;
++	u16 type;
++	int i;
++
++	if (mode->bpp == 16)
++		type = MODE_16BPP;
++	else if (mode->bpp == 32)
++		type = MODE_32BPP;
++	else
++		return -EINVAL;
++
++	for (ext = xgi_ext_modes; ext->mode_id != 0xff; ext++) {
++		res = &xgi_mode_res[ext->res_info];
++		if (res->htotal == mode->xres && res->vtotal == mode->yres &&
++		    (ext->mode_flag & MODE_TYPE_MASK) == type &&
++		    !(ext->mode_flag & (HALF_DCLK | DOUBLE_SCAN_MODE)))
++			break;
++	}
++	if (ext->mode_id == 0xff)
++		return -EINVAL;
++
++	for (i = 0; i < ARRAY_SIZE(xgi_rates); i++)
++		if (xgi_rates[i].xres == mode->xres &&
++		    xgi_rates[i].yres == mode->yres &&
++		    xgi_rates[i].refresh == mode->refresh)
++			break;
++	if (i == ARRAY_SIZE(xgi_rates))
++		return -EINVAL;
++
++	mode->mode_no = ext->mode_id;
++	mode->rate = xgi_rates[i].index;
++
++	return 0;
++}
++
++/* "video-mode" from envs */
++static int xgi_get_mode(struct xgi_mode *mode)
++{
++	uint xres, yres, depth, freq;
++	const char *options;
++
++	if (video_get_video_mode(&xres, &yres, &depth, &freq, &options)) {
++		mode->xres = xres;
++		mode->yres = yres;
++		mode->bpp = depth;
++		mode->refresh = freq;
++		if (!xgi_lookup_mode(mode))
++			return 0;
++		log_warning("xgi: unsupported video-mode %ux%u-%u@%u\n",
++			    xres, yres, depth, freq);
++	}
++
++	mode->xres = CONFIG_VIDEO_XGI_SIZE_X;
++	mode->yres = CONFIG_VIDEO_XGI_SIZE_Y;
++	mode->bpp = CONFIG_VIDEO_XGI_BPP;
++	mode->refresh = 60;
++
++	return xgi_lookup_mode(mode);
++}
++
++static ulong xgi_bar_size(struct udevice *dev, int bar)
++{
++	u32 addr, mask;
++	u16 cmd;
++
++	dm_pci_read_config16(dev, PCI_COMMAND, &cmd);
++	dm_pci_write_config16(dev, PCI_COMMAND, cmd & ~PCI_COMMAND_MEMORY);
++	dm_pci_read_config32(dev, bar, &addr);
++	dm_pci_write_config32(dev, bar, 0xffffffff);
++	dm_pci_read_config32(dev, bar, &mask);
++	dm_pci_write_config32(dev, bar, addr);
++	dm_pci_write_config16(dev, PCI_COMMAND, cmd);
++
++	return ~(mask & PCI_BASE_ADDRESS_MEM_MASK) + 1;
++}
++
++static int xgi_video_probe(struct udevice *dev)
++{
++	struct video_uc_plat *plat = dev_get_uclass_plat(dev);
++	struct video_priv *uc_priv = dev_get_uclass_priv(dev);
++	struct xgi_priv *priv = dev_get_priv(dev);
++	const struct xgi_mode *mode = dev_get_plat(dev);
++	int ret;
++
++	priv->fb_size = xgi_bar_size(dev, PCI_BASE_ADDRESS_0);
++	priv->io = dm_pci_map_bar(dev, PCI_BASE_ADDRESS_2, 0, 0,
++				  PCI_REGION_TYPE, PCI_REGION_IO);
++	priv->fb = dm_pci_map_bar(dev, PCI_BASE_ADDRESS_0, 0, 0,
++				  PCI_REGION_TYPE, PCI_REGION_MEM);
++	if (!priv->io || !priv->fb)
++		return log_msg_ret("bar", -EIO);
++
++	xgi_set(priv, VGA_SEQ_I, 0x05, XGI_PASSWORD);
++	if (xgi_get(priv, VGA_SEQ_I, 0x05) != XGI_PASSWORD_OK)
++		return log_msg_ret("io", -EIO);
++
++	/* linear addressing, MMIO and the 2D engine */
++	xgi_or(priv, VGA_SEQ_I, 0x20, 0x81);
++	xgi_or(priv, VGA_SEQ_I, 0x1e, 0x40);
++
++	ret = xgi_post(priv);
++	if (ret)
++		return log_msg_ret("post", ret);
++	log_debug("%s: %d MiB VRAM\n", dev->name,
++		  1 << (xgi_get(priv, VGA_SEQ_I, 0x14) >> 4));
++
++	ret = xgi_set_mode(priv, mode);
++	if (ret)
++		return log_msg_ret("set", ret);
++	xgi_save_mode(priv, mode);
++
++	uc_priv->xsize = mode->xres;
++	uc_priv->ysize = mode->yres;
++	if (mode->bpp == 32) {
++		uc_priv->bpix = VIDEO_BPP32;
++		uc_priv->format = VIDEO_X8R8G8B8;
++	} else {
++		uc_priv->bpix = VIDEO_BPP16;
++	}
++
++	if (IS_ENABLED(CONFIG_VIDEO_COPY))
++		plat->copy_base = (ulong)priv->fb;
++	else
++		plat->base = (ulong)priv->fb;
++
++	return 0;
++}
++
++static int xgi_video_bind(struct udevice *dev)
++{
++	struct video_uc_plat *plat = dev_get_uclass_plat(dev);
++	struct xgi_mode *mode = dev_get_plat(dev);
++	int ret;
++
++	ret = xgi_get_mode(mode);
++	if (ret)
++		return log_msg_ret("mode", ret);
++
++	plat->size = mode->xres * mode->yres * mode->bpp / 8;
++
++	return 0;
++}
++
++U_BOOT_DRIVER(xgi_video) = {
++	.name		= "xgi_video",
++	.id		= UCLASS_VIDEO,
++	.bind		= xgi_video_bind,
++	.probe		= xgi_video_probe,
++	.priv_auto	= sizeof(struct xgi_priv),
++	.plat_auto	= sizeof(struct xgi_mode),
++};
++
++static struct pci_device_id xgi_video_supported[] = {
++	{ PCI_DEVICE(0x18ca, 0x0027) },
++	{ },
++};
++
++U_BOOT_PCI_DEVICE(xgi_video, xgi_video_supported);
+diff --git a/drivers/video/xgi_tables.h b/drivers/video/xgi_tables.h
+new file mode 100644
+index 00000000000..79da813c91e
+--- /dev/null
++++ b/drivers/video/xgi_tables.h
+@@ -0,0 +1,647 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * XGI Volari Z11 (XG27) tables, taken from the Linux xgifb staging driver
++ */
++
++#ifndef __XGI_TABLES_H
++#define __XGI_TABLES_H
++
++#include <linux/types.h>
++
++struct xgi_mclk {
++	u8 sr28, sr29, sr2a;
++};
++
++struct xgi_eclk {
++	u8 sr2e, sr2f, sr30;
++};
++
++struct xgi_std_regs {
++	u8 sr[4];
++	u8 misc;
++	u8 crtc[0x19];
++	u8 attr[0x14];
++	u8 grc[9];
++};
++
++struct xgi_ext_mode {
++	u8 mode_id;
++	u16 mode_flag;
++	u16 mode_info;
++	u8 res_info;
++	u8 ref_index;
++};
++
++struct xgi_crt1_fix {
++	u8 mode_id;
++	u8 crt1_crtc;
++	u8 cr02, cr03, cr15, cr16;
++};
++
++struct xgi_crt1_timing {
++	u8 cr[15];
++};
++
++struct xgi_ref_rate {
++	u16 info_flag;
++	u8 crt1_crtc;
++	u8 crt_vclk;
++	u8 mode_id;
++	u16 xres, yres;
++};
++
++struct xgi_mode_res {
++	u16 htotal, vtotal;
++};
++
++struct xgi_vclk {
++	u8 sr2b, sr2c;
++	u16 clock;
++};
++
++struct xgi_rate {
++	u16 xres, yres;
++	u8 refresh;
++	u8 index;
++};
++
++struct xgi_dram_type {
++	u8 size;
++	u8 sr13;
++};
++
++static const struct xgi_mclk xg27_mclk[] = {
++	{ 0x5c, 0x23, 0x01 },
++	{ 0x19, 0x02, 0x01 },
++	{ 0x7c, 0x08, 0x80 },
++};
++
++static const struct xgi_eclk xg27_eclk[] = {
++	{ 0x5c, 0x23, 0x01 },
++	{ 0x55, 0x84, 0x01 },
++	{ 0x7c, 0x08, 0x01 },
++};
++
++static const u8 xg27_sr18[] = { 0x32, 0x32, 0x42 };
++
++static const u8 xg27_cr40[24][3] = {
++	{ 0x20, 0x40, 0x60 },
++	{ 0xc4, 0x40, 0x84 },
++	{ 0xc4, 0x40, 0x84 },
++	{ 0xb3, 0x13, 0xa4 },
++	{ 0xf0, 0xf5, 0xf0 },
++	{ 0x90, 0x90, 0x24 },
++	{ 0x77, 0x67, 0x44 },
++	{ 0x77, 0x77, 0x44 },
++	{ 0xff, 0xff, 0xff },
++	{ 0x55, 0x55, 0x55 },
++	{ 0x00, 0x00, 0x00 },
++	{ 0x88, 0xcc, 0x48 },
++	{ 0x44, 0x88, 0x77 },
++	{ 0x48, 0x88, 0x88 },
++	{ 0x54, 0x32, 0x44 },
++	{ 0x54, 0x33, 0x44 },
++	{ 0x0a, 0x07, 0x07 },
++	{ 0x44, 0x63, 0x44 },
++	{ 0x10, 0x14, 0x0a },
++	{ 0x11, 0x0b, 0x0c },
++	{ 0x05, 0x22, 0x05 },
++	{ 0xf0, 0xf0, 0x00 },
++	{ 0x05, 0x00, 0x02 },
++	{ 0x00, 0x00, 0x00 },
++};
++
++static const struct xgi_std_regs xgi_std_regs = {
++	.sr = { 0x21, 0x0f, 0x00, 0x0e },
++	.misc = 0x23,
++	.crtc = {
++		0x5f, 0x4f, 0x50, 0x82, 0x54, 0x80, 0x0b, 0x3e,
++		0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++		0xea, 0x8c, 0xdf, 0x28, 0x40, 0xe7, 0x04, 0xa3,
++		0xff
++	},
++	.attr = {
++		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
++		0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
++		0x01, 0x00, 0x00, 0x00
++	},
++	.grc = {
++		0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x05, 0x0f,
++		0xff
++	},
++};
++
++static const struct xgi_ext_mode xgi_ext_modes[] = {
++	{ 0x2e, 0x0a1b, 0x0306, 0x06, 0x06 },
++	{ 0x2f, 0x0a1b, 0x0305, 0x05, 0x05 },
++	{ 0x30, 0x2a1b, 0x0407, 0x07, 0x0e },
++	{ 0x31, 0x0a1b, 0x030d, 0x0d, 0x3d },
++	{ 0x32, 0x0a1b, 0x0a0e, 0x0e, 0x3e },
++	{ 0x33, 0x0a1d, 0x0a0d, 0x0d, 0x3d },
++	{ 0x34, 0x2a1d, 0x0a0e, 0x0e, 0x3e },
++	{ 0x35, 0x0a1f, 0x0a0d, 0x0d, 0x3d },
++	{ 0x36, 0x2a1f, 0x0a0e, 0x0e, 0x3e },
++	{ 0x38, 0x0a1b, 0x0508, 0x08, 0x16 },
++	{ 0x3a, 0x0e3b, 0x0609, 0x09, 0x1e },
++	{ 0x3c, 0x0e3b, 0x070a, 0x0a, 0x22 },
++	{ 0x3d, 0x0e7d, 0x070a, 0x0a, 0x22 },
++	{ 0x40, 0x9a1c, 0x0000, 0x00, 0x00 },
++	{ 0x41, 0x9a1d, 0x0000, 0x00, 0x00 },
++	{ 0x43, 0x0a1c, 0x0306, 0x06, 0x06 },
++	{ 0x44, 0x0a1d, 0x0306, 0x06, 0x06 },
++	{ 0x46, 0x2a1c, 0x0407, 0x07, 0x0e },
++	{ 0x47, 0x2a1d, 0x0407, 0x07, 0x0e },
++	{ 0x49, 0x0a3c, 0x0508, 0x08, 0x16 },
++	{ 0x4a, 0x0a3d, 0x0508, 0x08, 0x16 },
++	{ 0x4c, 0x0e7c, 0x0609, 0x09, 0x1e },
++	{ 0x4d, 0x0e7d, 0x0609, 0x09, 0x1e },
++	{ 0x50, 0x9a1b, 0x0001, 0x01, 0x02 },
++	{ 0x51, 0xba1b, 0x0103, 0x03, 0x03 },
++	{ 0x52, 0x9a1b, 0x0204, 0x04, 0x04 },
++	{ 0x56, 0x9a1d, 0x0001, 0x01, 0x02 },
++	{ 0x57, 0xba1d, 0x0103, 0x03, 0x03 },
++	{ 0x58, 0x9a1d, 0x0204, 0x04, 0x04 },
++	{ 0x59, 0x9a1b, 0x0000, 0x00, 0x00 },
++	{ 0x5a, 0x021b, 0x0014, 0x01, 0x3f },
++	{ 0x5b, 0x0a1d, 0x0014, 0x01, 0x3f },
++	{ 0x5d, 0x0a1d, 0x0305, 0x05, 0x05 },
++	{ 0x62, 0x0a3f, 0x0306, 0x06, 0x06 },
++	{ 0x63, 0x2a3f, 0x0407, 0x07, 0x0e },
++	{ 0x64, 0x0a7f, 0x0508, 0x08, 0x16 },
++	{ 0x65, 0x0eff, 0x0609, 0x09, 0x1e },
++	{ 0x66, 0x0eff, 0x070a, 0x0a, 0x22 },
++	{ 0x68, 0x067b, 0x080b, 0x0b, 0x29 },
++	{ 0x69, 0x06fd, 0x080b, 0x0b, 0x29 },
++	{ 0x6b, 0x07ff, 0x080b, 0x0b, 0x29 },
++	{ 0x6c, 0x067b, 0x090c, 0x0c, 0x2f },
++	{ 0x6d, 0x06fd, 0x090c, 0x0c, 0x2f },
++	{ 0x6e, 0x07ff, 0x090c, 0x0c, 0x2f },
++	{ 0x70, 0x2a1b, 0x0410, 0x10, 0x34 },
++	{ 0x71, 0x0a1b, 0x0511, 0x11, 0x37 },
++	{ 0x74, 0x0a1d, 0x0511, 0x11, 0x37 },
++	{ 0x75, 0x0a3d, 0x0612, 0x12, 0x3a },
++	{ 0x76, 0x2a1f, 0x0410, 0x10, 0x34 },
++	{ 0x77, 0x0a1f, 0x0511, 0x11, 0x37 },
++	{ 0x78, 0x0a3f, 0x0612, 0x12, 0x3a },
++	{ 0x79, 0x0a3b, 0x0612, 0x12, 0x3a },
++	{ 0x7a, 0x2a1d, 0x0410, 0x10, 0x34 },
++	{ 0x7b, 0x0e3b, 0x060f, 0x0f, 0x1d },
++	{ 0x7c, 0x0e7d, 0x060f, 0x0f, 0x1d },
++	{ 0x7d, 0x0eff, 0x060f, 0x0f, 0x1d },
++	{ 0x20, 0x0e3b, 0x0d16, 0x16, 0x43 },
++	{ 0x21, 0x0e7d, 0x0d16, 0x16, 0x43 },
++	{ 0x22, 0x0eff, 0x0d16, 0x16, 0x43 },
++	{ 0x23, 0x0e3b, 0x0614, 0x14, 0x41 },
++	{ 0x24, 0x0e7d, 0x0614, 0x14, 0x41 },
++	{ 0x25, 0x0eff, 0x0614, 0x14, 0x41 },
++	{ 0x26, 0x063b, 0x0c15, 0x15, 0x42 },
++	{ 0x27, 0x067d, 0x0c15, 0x15, 0x42 },
++	{ 0x28, 0x06ff, 0x0c15, 0x15, 0x42 },
++	{ 0xff }
++};
++
++/* CRTC corrections for XG21/XG27 digital outputs, 0xff matches any CRTC */
++static const struct xgi_crt1_fix xgi_crt1_fixes[] = {
++	{ 0x2e, 0x05, 0x4f, 0x83, 0xdf, 0x0c },
++	{ 0x2e, 0x06, 0x4f, 0x87, 0xdf, 0xc0 },
++	{ 0x2f, 0xff, 0x4f, 0x83, 0x8f, 0xc0 },
++	{ 0x50, 0xff, 0x27, 0x91, 0xdf, 0x0c },
++	{ 0x59, 0xff, 0x27, 0x91, 0x8f, 0xc0 },
++};
++
++static const struct xgi_crt1_timing xgi_crt1_timings[] = {
++	{ { 0x2d, 0x28, 0x90, 0x2c, 0x90, 0x00, 0x04, 0x00,
++	    0xbf, 0x1f, 0x9c, 0x8e, 0x96, 0xb9, 0x30 } },	/* 0x00 */
++	{ { 0x2d, 0x28, 0x90, 0x2c, 0x90, 0x00, 0x04, 0x00,
++	    0x0b, 0x3e, 0xe9, 0x8b, 0xe7, 0x04, 0x00 } },	/* 0x01 */
++	{ { 0x3d, 0x31, 0x81, 0x37, 0x1f, 0x00, 0x05, 0x00,
++	    0x72, 0xf0, 0x58, 0x8c, 0x57, 0x73, 0xa0 } },	/* 0x02 */
++	{ { 0x4f, 0x3f, 0x93, 0x45, 0x0d, 0x00, 0x01, 0x00,
++	    0x24, 0xf5, 0x02, 0x88, 0xff, 0x25, 0x90 } },	/* 0x03 */
++	{ { 0x5f, 0x50, 0x82, 0x55, 0x81, 0x00, 0x05, 0x00,
++	    0xbf, 0x1f, 0x9c, 0x8e, 0x96, 0xb9, 0x30 } },	/* 0x04 */
++	{ { 0x5f, 0x50, 0x82, 0x55, 0x81, 0x00, 0x05, 0x00,
++	    0x0b, 0x3e, 0xe9, 0x8b, 0xe7, 0x04, 0x00 } },	/* 0x05 */
++	{ { 0x63, 0x50, 0x86, 0x56, 0x9b, 0x00, 0x01, 0x00,
++	    0x06, 0x3e, 0xe8, 0x8b, 0xe7, 0xff, 0x10 } },	/* 0x06 */
++	{ { 0x64, 0x4f, 0x88, 0x55, 0x9d, 0x00, 0x01, 0x00,
++	    0xf2, 0x1f, 0xe0, 0x83, 0xdf, 0xf3, 0x10 } },	/* 0x07 */
++	{ { 0x63, 0x4f, 0x87, 0x5a, 0x81, 0x00, 0x05, 0x00,
++	    0xfb, 0x1f, 0xe0, 0x83, 0xdf, 0xfc, 0x10 } },	/* 0x08 */
++	{ { 0x65, 0x4f, 0x89, 0x58, 0x80, 0x00, 0x05, 0x60,
++	    0xfb, 0x1f, 0xe0, 0x83, 0xdf, 0xfc, 0x80 } },	/* 0x09 */
++	{ { 0x65, 0x4f, 0x89, 0x58, 0x80, 0x00, 0x05, 0x60,
++	    0x01, 0x3e, 0xe0, 0x83, 0xdf, 0x02, 0x80 } },	/* 0x0a */
++	{ { 0x67, 0x4f, 0x8b, 0x58, 0x81, 0x00, 0x05, 0x60,
++	    0x0d, 0x3e, 0xe0, 0x83, 0xdf, 0x0e, 0x90 } },	/* 0x0b */
++	{ { 0x65, 0x4f, 0x89, 0x57, 0x9f, 0x00, 0x01, 0x00,
++	    0xfb, 0x1f, 0xe6, 0x8a, 0xdf, 0xfc, 0x10 } },	/* 0x0c */
++	{ { 0x7b, 0x63, 0x9f, 0x6a, 0x93, 0x00, 0x05, 0x00,
++	    0x6f, 0xf0, 0x58, 0x8a, 0x57, 0x70, 0xa0 } },	/* 0x0d */
++	{ { 0x7f, 0x63, 0x83, 0x6c, 0x1c, 0x00, 0x06, 0x00,
++	    0x72, 0xf0, 0x58, 0x8c, 0x57, 0x73, 0xa0 } },	/* 0x0e */
++	{ { 0x7d, 0x63, 0x81, 0x6e, 0x1d, 0x00, 0x06, 0x00,
++	    0x98, 0xf0, 0x7c, 0x82, 0x57, 0x99, 0x80 } },	/* 0x0f */
++	{ { 0x7f, 0x63, 0x83, 0x69, 0x13, 0x00, 0x06, 0x00,
++	    0x6f, 0xf0, 0x58, 0x8b, 0x57, 0x70, 0xa0 } },	/* 0x10 */
++	{ { 0x7e, 0x63, 0x82, 0x6b, 0x13, 0x00, 0x06, 0x00,
++	    0x75, 0xf0, 0x58, 0x8b, 0x57, 0x76, 0xa0 } },	/* 0x11 */
++	{ { 0x81, 0x63, 0x85, 0x6d, 0x18, 0x00, 0x06, 0x60,
++	    0x7a, 0xf0, 0x58, 0x8b, 0x57, 0x7b, 0xa0 } },	/* 0x12 */
++	{ { 0x83, 0x63, 0x87, 0x6e, 0x19, 0x00, 0x06, 0x60,
++	    0x81, 0xf0, 0x58, 0x8b, 0x57, 0x82, 0xa0 } },	/* 0x13 */
++	{ { 0x85, 0x63, 0x89, 0x6f, 0x1a, 0x00, 0x06, 0x60,
++	    0x91, 0xf0, 0x58, 0x8b, 0x57, 0x92, 0xa0 } },	/* 0x14 */
++	{ { 0x99, 0x7f, 0x9d, 0x84, 0x1a, 0x00, 0x02, 0x00,
++	    0x96, 0x1f, 0x7f, 0x83, 0x7f, 0x97, 0x10 } },	/* 0x15 */
++	{ { 0xa3, 0x7f, 0x87, 0x86, 0x97, 0x00, 0x02, 0x00,
++	    0x24, 0xf5, 0x02, 0x88, 0xff, 0x25, 0x90 } },	/* 0x16 */
++	{ { 0xa1, 0x7f, 0x85, 0x86, 0x97, 0x00, 0x02, 0x00,
++	    0x24, 0xf5, 0x02, 0x88, 0xff, 0x25, 0x90 } },	/* 0x17 */
++	{ { 0x9f, 0x7f, 0x83, 0x85, 0x91, 0x00, 0x02, 0x00,
++	    0x1e, 0xf5, 0x00, 0x83, 0xff, 0x1f, 0x90 } },	/* 0x18 */
++	{ { 0xa7, 0x7f, 0x8b, 0x89, 0x95, 0x00, 0x02, 0x00,
++	    0x26, 0xf5, 0x00, 0x83, 0xff, 0x27, 0x90 } },	/* 0x19 */
++	{ { 0xa9, 0x7f, 0x8d, 0x8c, 0x9a, 0x00, 0x02, 0x62,
++	    0x2c, 0xf5, 0x00, 0x83, 0xff, 0x2d, 0x14 } },	/* 0x1a */
++	{ { 0xab, 0x7f, 0x8f, 0x8d, 0x9b, 0x00, 0x02, 0x62,
++	    0x35, 0xf5, 0x00, 0x83, 0xff, 0x36, 0x14 } },	/* 0x1b */
++	{ { 0xcf, 0x9f, 0x93, 0xb2, 0x01, 0x00, 0x03, 0x00,
++	    0x14, 0xba, 0x00, 0x83, 0xff, 0x15, 0x00 } },	/* 0x1c */
++	{ { 0xce, 0x9f, 0x92, 0xa9, 0x17, 0x00, 0x07, 0x00,
++	    0x28, 0x5a, 0x00, 0x83, 0xff, 0x29, 0x89 } },	/* 0x1d */
++	{ { 0xce, 0x9f, 0x92, 0xa5, 0x17, 0x00, 0x07, 0x00,
++	    0x28, 0x5a, 0x00, 0x83, 0xff, 0x29, 0x89 } },	/* 0x1e */
++	{ { 0xd3, 0x9f, 0x97, 0xab, 0x1f, 0x00, 0x07, 0x00,
++	    0x2e, 0x5a, 0x00, 0x83, 0xff, 0x2f, 0x89 } },	/* 0x1f */
++	{ { 0x09, 0xc7, 0x8d, 0xd3, 0x0b, 0x01, 0x04, 0x00,
++	    0xe0, 0x10, 0xb0, 0x83, 0xaf, 0xe1, 0x2f } },	/* 0x20 */
++	{ { 0x09, 0xc7, 0x8d, 0xd3, 0x0b, 0x01, 0x04, 0x00,
++	    0xe0, 0x10, 0xb0, 0x83, 0xaf, 0xe1, 0x2f } },	/* 0x21 */
++	{ { 0x09, 0xc7, 0x8d, 0xd3, 0x0b, 0x01, 0x04, 0x00,
++	    0xe0, 0x10, 0xb0, 0x83, 0xaf, 0xe1, 0x2f } },	/* 0x22 */
++	{ { 0x09, 0xc7, 0x8d, 0xd3, 0x0b, 0x01, 0x04, 0x00,
++	    0xe0, 0x10, 0xb0, 0x83, 0xaf, 0xe1, 0x2f } },	/* 0x23 */
++	{ { 0x09, 0xc7, 0x8d, 0xd3, 0x0b, 0x01, 0x04, 0x00,
++	    0xe0, 0x10, 0xb0, 0x83, 0xaf, 0xe1, 0x2f } },	/* 0x24 */
++	{ { 0x09, 0xc7, 0x8d, 0xd3, 0x0b, 0x01, 0x04, 0x00,
++	    0xe0, 0x10, 0xb0, 0x83, 0xaf, 0xe1, 0x2f } },	/* 0x25 */
++	{ { 0x09, 0xc7, 0x8d, 0xd3, 0x0b, 0x01, 0x04, 0x00,
++	    0xe0, 0x10, 0xb0, 0x83, 0xaf, 0xe1, 0x2f } },	/* 0x26 */
++	{ { 0x40, 0xef, 0x84, 0x03, 0x1d, 0x41, 0x01, 0x00,
++	    0xda, 0x1f, 0xa0, 0x83, 0x9f, 0xdb, 0x1f } },	/* 0x27 */
++	{ { 0x43, 0xef, 0x87, 0x06, 0x00, 0x41, 0x05, 0x62,
++	    0xd4, 0x1f, 0xa0, 0x83, 0x9f, 0xd5, 0x9f } },	/* 0x28 */
++	{ { 0x45, 0xef, 0x89, 0x07, 0x01, 0x41, 0x05, 0x62,
++	    0xd9, 0x1f, 0xa0, 0x83, 0x9f, 0xda, 0x9f } },	/* 0x29 */
++	{ { 0x40, 0xef, 0x84, 0x03, 0x1d, 0x41, 0x01, 0x00,
++	    0xda, 0x1f, 0xa0, 0x83, 0x9f, 0xdb, 0x1f } },	/* 0x2a */
++	{ { 0x40, 0xef, 0x84, 0x03, 0x1d, 0x41, 0x01, 0x00,
++	    0xda, 0x1f, 0xa0, 0x83, 0x9f, 0xdb, 0x1f } },	/* 0x2b */
++	{ { 0x40, 0xef, 0x84, 0x03, 0x1d, 0x41, 0x01, 0x00,
++	    0xda, 0x1f, 0xa0, 0x83, 0x9f, 0xdb, 0x1f } },	/* 0x2c */
++	{ { 0x59, 0xff, 0x9d, 0x17, 0x13, 0x41, 0x05, 0x44,
++	    0x33, 0xba, 0x00, 0x83, 0xff, 0x34, 0x0f } },	/* 0x2d */
++	{ { 0x5b, 0xff, 0x9f, 0x18, 0x14, 0x41, 0x05, 0x44,
++	    0x38, 0xba, 0x00, 0x83, 0xff, 0x39, 0x0f } },	/* 0x2e */
++	{ { 0x5b, 0xff, 0x9f, 0x18, 0x14, 0x41, 0x05, 0x44,
++	    0x3d, 0xba, 0x00, 0x83, 0xff, 0x3e, 0x0f } },	/* 0x2f */
++	{ { 0x5d, 0xff, 0x81, 0x19, 0x95, 0x41, 0x05, 0x44,
++	    0x41, 0xba, 0x00, 0x84, 0xff, 0x42, 0x0f } },	/* 0x30 */
++	{ { 0x55, 0xff, 0x99, 0x0d, 0x0c, 0x41, 0x05, 0x00,
++	    0x3e, 0xba, 0x00, 0x84, 0xff, 0x3f, 0x0f } },	/* 0x31 */
++	{ { 0x7f, 0x63, 0x83, 0x6c, 0x1c, 0x00, 0x06, 0x00,
++	    0x72, 0xba, 0x27, 0x8b, 0xdf, 0x73, 0x80 } },	/* 0x32 */
++	{ { 0x7f, 0x63, 0x83, 0x69, 0x13, 0x00, 0x06, 0x00,
++	    0x6f, 0xba, 0x26, 0x89, 0xdf, 0x6f, 0x80 } },	/* 0x33 */
++	{ { 0x7f, 0x63, 0x82, 0x6b, 0x13, 0x00, 0x06, 0x00,
++	    0x75, 0xba, 0x29, 0x8c, 0xdf, 0x75, 0x80 } },	/* 0x34 */
++	{ { 0xa3, 0x7f, 0x87, 0x86, 0x97, 0x00, 0x02, 0x00,
++	    0x24, 0xf1, 0xaf, 0x85, 0x3f, 0x25, 0xb0 } },	/* 0x35 */
++	{ { 0x9f, 0x7f, 0x83, 0x85, 0x91, 0x00, 0x02, 0x00,
++	    0x1e, 0xf1, 0xad, 0x81, 0x3f, 0x1f, 0xb0 } },	/* 0x36 */
++	{ { 0xa7, 0x7f, 0x88, 0x89, 0x15, 0x00, 0x02, 0x00,
++	    0x26, 0xf1, 0xb1, 0x85, 0x3f, 0x27, 0xb0 } },	/* 0x37 */
++	{ { 0xce, 0x9f, 0x92, 0xa9, 0x17, 0x00, 0x07, 0x00,
++	    0x28, 0xc4, 0x7a, 0x8e, 0xcf, 0x29, 0xa1 } },	/* 0x38 */
++	{ { 0xce, 0x9f, 0x92, 0xa5, 0x17, 0x00, 0x07, 0x00,
++	    0x28, 0xd4, 0x7a, 0x8e, 0xcf, 0x29, 0xa1 } },	/* 0x39 */
++	{ { 0xd3, 0x9f, 0x97, 0xab, 0x1f, 0x00, 0x07, 0x00,
++	    0x2e, 0xd4, 0x7d, 0x81, 0xcf, 0x2f, 0xa1 } },	/* 0x3a */
++	{ { 0xdc, 0x9f, 0x00, 0xab, 0x19, 0x00, 0x07, 0x00,
++	    0xe6, 0xef, 0xc0, 0xc3, 0xbf, 0xe7, 0x90 } },	/* 0x3b */
++	{ { 0x6b, 0x59, 0x8f, 0x5e, 0x8c, 0x00, 0x05, 0x00,
++	    0x0b, 0x3e, 0xe9, 0x8b, 0xe7, 0x04, 0x00 } },	/* 0x3c */
++	{ { 0x7b, 0x63, 0x9f, 0x6a, 0x93, 0x00, 0x05, 0x00,
++	    0x6f, 0xf0, 0x58, 0x8a, 0x57, 0x70, 0xa0 } },	/* 0x3d */
++	{ { 0x86, 0x6a, 0x8a, 0x74, 0x06, 0x00, 0x02, 0x00,
++	    0x8c, 0x15, 0x4f, 0x83, 0xef, 0x8d, 0x30 } },	/* 0x3e */
++	{ { 0x81, 0x6a, 0x85, 0x70, 0x00, 0x00, 0x02, 0x00,
++	    0x0f, 0x3e, 0xeb, 0x8e, 0xdf, 0x10, 0x00 } },	/* 0x3f */
++	{ { 0xce, 0x9f, 0x92, 0xa9, 0x17, 0x00, 0x07, 0x00,
++	    0x20, 0xf5, 0x03, 0x88, 0xff, 0x21, 0x90 } },	/* 0x40 */
++	{ { 0xe6, 0xae, 0x8a, 0xbd, 0x90, 0x00, 0x03, 0x00,
++	    0x3d, 0x10, 0x1a, 0x8d, 0x19, 0x3e, 0x2f } },	/* 0x41 */
++	{ { 0xb9, 0x8f, 0x9d, 0x9b, 0x8a, 0x00, 0x06, 0x00,
++	    0x7d, 0xff, 0x60, 0x83, 0x5f, 0x7e, 0x90 } },	/* 0x42 */
++	{ { 0xc3, 0x8f, 0x87, 0x9b, 0x0b, 0x00, 0x07, 0x00,
++	    0x82, 0xff, 0x60, 0x83, 0x5f, 0x83, 0x90 } },	/* 0x43 */
++	{ { 0xad, 0x7f, 0x91, 0x8e, 0x9c, 0x00, 0x02, 0x82,
++	    0x49, 0xf5, 0x00, 0x83, 0xff, 0x4a, 0x90 } },	/* 0x44 */
++	{ { 0xcd, 0x9f, 0x91, 0xa7, 0x19, 0x00, 0x07, 0x60,
++	    0xe6, 0xff, 0xc0, 0x83, 0xbf, 0xe7, 0x90 } },	/* 0x45 */
++	{ { 0xd3, 0x9f, 0x97, 0xab, 0x1f, 0x00, 0x07, 0x60,
++	    0xf1, 0xff, 0xc0, 0x83, 0xbf, 0xf2, 0x90 } },	/* 0x46 */
++	{ { 0xd7, 0x9f, 0x9b, 0xac, 0x1e, 0x00, 0x07, 0x00,
++	    0x03, 0xde, 0xc0, 0x84, 0xbf, 0x04, 0x90 } },	/* 0x47 */
++};
++
++static const struct xgi_ref_rate xgi_ref_rates[] = {
++	{ 0x407f, 0x00, 0x00, 0x59,  320,  200 },
++	{ 0x407f, 0x00, 0x00, 0x00,  320,  400 },
++	{ 0xc07f, 0x01, 0x00, 0x50,  320,  240 },
++	{ 0x007f, 0x02, 0x04, 0x51,  400,  300 },
++	{ 0xc877, 0x03, 0x0b, 0x52,  512,  384 },
++	{ 0x407f, 0x04, 0x00, 0x2f,  640,  400 },
++	{ 0xc07f, 0x05, 0x00, 0x2e,  640,  480 },
++	{ 0xc067, 0x06, 0x02, 0x2e,  640,  480 },
++	{ 0xc067, 0x07, 0x02, 0x2e,  640,  480 },
++	{ 0xc047, 0x08, 0x03, 0x2e,  640,  480 },
++	{ 0x4047, 0x09, 0x05, 0x2e,  640,  480 },
++	{ 0x4047, 0x0a, 0x09, 0x2e,  640,  480 },
++	{ 0x4047, 0x0b, 0x0e, 0x2e,  640,  480 },
++	{ 0xc047, 0x0c, 0x15, 0x2e,  640,  480 },
++	{ 0x005f, 0x0d, 0x03, 0x6a,  800,  600 },
++	{ 0x0077, 0x0e, 0x04, 0x6a,  800,  600 },
++	{ 0x0067, 0x0f, 0x08, 0x6a,  800,  600 },
++	{ 0x0067, 0x10, 0x07, 0x6a,  800,  600 },
++	{ 0x0047, 0x11, 0x0a, 0x6a,  800,  600 },
++	{ 0x4047, 0x12, 0x0d, 0x6a,  800,  600 },
++	{ 0x4047, 0x13, 0x13, 0x6a,  800,  600 },
++	{ 0x4047, 0x14, 0x1c, 0x6a,  800,  600 },
++	{ 0x0087, 0x15, 0x06, 0x37, 1024,  768 },
++	{ 0xc877, 0x16, 0x0b, 0x37, 1024,  768 },
++	{ 0xc067, 0x17, 0x0f, 0x37, 1024,  768 },
++	{ 0x0067, 0x18, 0x11, 0x37, 1024,  768 },
++	{ 0x0047, 0x19, 0x16, 0x37, 1024,  768 },
++	{ 0x4047, 0x1a, 0x1b, 0x37, 1024,  768 },
++	{ 0x4047, 0x1b, 0x1f, 0x37, 1024,  768 },
++	{ 0x0027, 0x3b, 0x19, 0x7b, 1280,  960 },
++	{ 0x0087, 0x1c, 0x11, 0x3a, 1280, 1024 },
++	{ 0x0077, 0x1d, 0x19, 0x3a, 1280, 1024 },
++	{ 0x0077, 0x1e, 0x1e, 0x3a, 1280, 1024 },
++	{ 0x0007, 0x1f, 0x20, 0x3a, 1280, 1024 },
++	{ 0x0127, 0x20, 0x21, 0x3c, 1600, 1200 },
++	{ 0x0107, 0x21, 0x22, 0x3c, 1600, 1200 },
++	{ 0x0107, 0x22, 0x23, 0x3c, 1600, 1200 },
++	{ 0x0107, 0x23, 0x25, 0x3c, 1600, 1200 },
++	{ 0x0007, 0x24, 0x26, 0x3c, 1600, 1200 },
++	{ 0x0007, 0x25, 0x2c, 0x3c, 1600, 1200 },
++	{ 0x0007, 0x26, 0x34, 0x3c, 1600, 1200 },
++	{ 0x8027, 0x27, 0x27, 0x68, 1920, 1440 },
++	{ 0x4007, 0x28, 0x29, 0x68, 1920, 1440 },
++	{ 0x4007, 0x29, 0x2e, 0x68, 1920, 1440 },
++	{ 0x4007, 0x2a, 0x30, 0x68, 1920, 1440 },
++	{ 0x4007, 0x2b, 0x35, 0x68, 1920, 1440 },
++	{ 0x4005, 0x2c, 0x39, 0x68, 1920, 1440 },
++	{ 0x4027, 0x2d, 0x2b, 0x6c, 2048, 1536 },
++	{ 0x4007, 0x2e, 0x31, 0x6c, 2048, 1536 },
++	{ 0x4007, 0x2f, 0x33, 0x6c, 2048, 1536 },
++	{ 0x4007, 0x30, 0x37, 0x6c, 2048, 1536 },
++	{ 0x4005, 0x31, 0x38, 0x6c, 2048, 1536 },
++	{ 0x1057, 0x32, 0x40, 0x70,  800,  480 },
++	{ 0x0047, 0x33, 0x07, 0x70,  800,  480 },
++	{ 0x0047, 0x34, 0x0a, 0x70,  800,  480 },
++	{ 0x1057, 0x35, 0x0b, 0x71, 1024,  576 },
++	{ 0x0047, 0x36, 0x11, 0x71, 1024,  576 },
++	{ 0x0047, 0x37, 0x16, 0x71, 1024,  576 },
++	{ 0x1057, 0x38, 0x19, 0x75, 1280,  720 },
++	{ 0x0047, 0x39, 0x1e, 0x75, 1280,  720 },
++	{ 0x0047, 0x3a, 0x20, 0x75, 1280,  720 },
++	{ 0xc00f, 0x3c, 0x01, 0x31,  720,  480 },
++	{ 0x000f, 0x3d, 0x03, 0x32,  720,  576 },
++	{ 0x00df, 0x3e, 0x49, 0x00,  856,  480 },
++	{ 0xc05f, 0x3f, 0x49, 0x00,  856,  480 },
++	{ 0x0067, 0x40, 0x12, 0x23, 1280,  768 },
++	{ 0x0067, 0x41, 0x4a, 0x26, 1400, 1050 },
++	{ 0x0047, 0x42, 0x4b, 0x20, 1152,  864 },
++	{ 0x0047, 0x43, 0x4c, 0x20, 1152,  864 },
++	{ 0x0067, 0x45, 0x51, 0x7b, 1280,  960 },
++	{ 0x0067, 0x46, 0x52, 0x7b, 1280,  960 },
++	{ 0x0067, 0x47, 0x55, 0x7b, 1280,  960 },
++	{ 0x4047, 0x44, 0x1f, 0x37, 1024,  768 },
++};
++
++static const u8 xgi_screen_offset[] = {
++	0x14, 0x19, 0x20, 0x28, 0x32, 0x40, 0x50, 0x64,
++	0x78, 0x80, 0x2d, 0x35, 0x57, 0x48
++};
++
++static const struct xgi_mode_res xgi_mode_res[] = {
++	{  320,  200 },
++	{  320,  240 },
++	{  320,  400 },
++	{  400,  300 },
++	{  512,  384 },
++	{  640,  400 },
++	{  640,  480 },
++	{  800,  600 },
++	{ 1024,  768 },
++	{ 1280, 1024 },
++	{ 1600, 1200 },
++	{ 1920, 1440 },
++	{ 2048, 1536 },
++	{  720,  480 },
++	{  720,  576 },
++	{ 1280,  960 },
++	{  800,  480 },
++	{ 1024,  576 },
++	{ 1280,  720 },
++	{  856,  480 },
++	{ 1280,  768 },
++	{ 1400, 1050 },
++	{ 1152,  864 },
++};
++
++static const struct xgi_vclk xgi_vclks[] = {
++	{ 0x1b, 0xe1,  25 },	/* 0x00 */
++	{ 0x4e, 0xe4,  28 },	/* 0x01 */
++	{ 0x57, 0xe4,  31 },	/* 0x02 */
++	{ 0xc3, 0xc8,  36 },	/* 0x03 */
++	{ 0x42, 0xe2,  40 },	/* 0x04 */
++	{ 0xfe, 0xcd,  43 },	/* 0x05 */
++	{ 0x5d, 0xc4,  44 },	/* 0x06 */
++	{ 0x52, 0xe2,  49 },	/* 0x07 */
++	{ 0x53, 0xe2,  50 },	/* 0x08 */
++	{ 0x74, 0x67,  52 },	/* 0x09 */
++	{ 0x6d, 0x66,  56 },	/* 0x0a */
++	{ 0x6c, 0xc3,  65 },	/* 0x0b */
++	{ 0x46, 0x44,  67 },	/* 0x0c */
++	{ 0xb1, 0x46,  68 },	/* 0x0d */
++	{ 0xd3, 0x4a,  72 },	/* 0x0e */
++	{ 0x29, 0x61,  75 },	/* 0x0f */
++	{ 0x6e, 0x46,  76 },	/* 0x10 */
++	{ 0x2b, 0x61,  78 },	/* 0x11 */
++	{ 0x31, 0x42,  79 },	/* 0x12 */
++	{ 0xab, 0x44,  83 },	/* 0x13 */
++	{ 0x46, 0x25,  84 },	/* 0x14 */
++	{ 0x78, 0x29,  86 },	/* 0x15 */
++	{ 0x62, 0x44,  94 },	/* 0x16 */
++	{ 0x2b, 0x41, 104 },	/* 0x17 */
++	{ 0x3a, 0x23, 105 },	/* 0x18 */
++	{ 0x70, 0x44, 108 },	/* 0x19 */
++	{ 0x3c, 0x23, 109 },	/* 0x1a */
++	{ 0x5e, 0x43, 113 },	/* 0x1b */
++	{ 0xbc, 0x44, 116 },	/* 0x1c */
++	{ 0xe0, 0x46, 132 },	/* 0x1d */
++	{ 0x54, 0x42, 135 },	/* 0x1e */
++	{ 0x9c, 0x22, 139 },	/* 0x1f */
++	{ 0x41, 0x22, 157 },	/* 0x20 */
++	{ 0x70, 0x24, 162 },	/* 0x21 */
++	{ 0x30, 0x21, 175 },	/* 0x22 */
++	{ 0x4e, 0x22, 189 },	/* 0x23 */
++	{ 0xde, 0x26, 194 },	/* 0x24 */
++	{ 0x62, 0x06, 202 },	/* 0x25 */
++	{ 0x3f, 0x03, 229 },	/* 0x26 */
++	{ 0xb8, 0x06, 234 },	/* 0x27 */
++	{ 0x34, 0x02, 253 },	/* 0x28 */
++	{ 0x58, 0x04, 255 },	/* 0x29 */
++	{ 0x24, 0x01, 265 },	/* 0x2a */
++	{ 0x9b, 0x02, 267 },	/* 0x2b */
++	{ 0x70, 0x05, 270 },	/* 0x2c */
++	{ 0x25, 0x01, 272 },	/* 0x2d */
++	{ 0x9c, 0x02, 277 },	/* 0x2e */
++	{ 0x27, 0x01, 286 },	/* 0x2f */
++	{ 0xb3, 0x04, 291 },	/* 0x30 */
++	{ 0xbc, 0x05, 292 },	/* 0x31 */
++	{ 0xf6, 0x0a, 310 },	/* 0x32 */
++	{ 0x95, 0x01, 315 },	/* 0x33 */
++	{ 0xf0, 0x09, 324 },	/* 0x34 */
++	{ 0xfe, 0x0a, 331 },	/* 0x35 */
++	{ 0xf3, 0x09, 332 },	/* 0x36 */
++	{ 0x5e, 0x03, 340 },	/* 0x37 */
++	{ 0xe8, 0x07, 376 },	/* 0x38 */
++	{ 0xde, 0x06, 389 },	/* 0x39 */
++	{ 0x52, 0x2a,  54 },	/* 0x3a */
++	{ 0x52, 0x6a,  27 },	/* 0x3b */
++	{ 0x62, 0x24,  70 },	/* 0x3c */
++	{ 0x62, 0x64,  70 },	/* 0x3d */
++	{ 0xa8, 0x4c,  30 },	/* 0x3e */
++	{ 0x20, 0x26,  33 },	/* 0x3f */
++	{ 0x31, 0xc2,  39 },	/* 0x40 */
++	{ 0x11, 0x21,  30 },	/* 0x41 */
++	{ 0x2e, 0x48,  25 },	/* 0x42 */
++	{ 0x24, 0x46,  25 },	/* 0x43 */
++	{ 0x26, 0x64,  28 },	/* 0x44 */
++	{ 0x37, 0x64,  40 },	/* 0x45 */
++	{ 0xa1, 0x42, 108 },	/* 0x46 */
++	{ 0x37, 0x61, 100 },	/* 0x47 */
++	{ 0x78, 0x27, 108 },	/* 0x48 */
++	{ 0xbf, 0xc8,  35 },	/* 0x49 */
++	{ 0x66, 0x43, 123 },	/* 0x4a */
++	{ 0x2c, 0x61,  80 },	/* 0x4b */
++	{ 0x3b, 0x61, 108 },	/* 0x4c */
++	{ 0x69, 0x61, 191 },	/* 0x4d */
++	{ 0x4f, 0x22, 192 },	/* 0x4e */
++	{ 0x28, 0x26, 322 },	/* 0x4f */
++	{ 0x5c, 0x6b,  27 },	/* 0x50 */
++	{ 0x57, 0x24, 126 },	/* 0x51 */
++	{ 0x5c, 0x42, 148 },	/* 0x52 */
++	{ 0x42, 0x61, 120 },	/* 0x53 */
++	{ 0x62, 0x61, 178 },	/* 0x54 */
++	{ 0x59, 0x22, 217 },	/* 0x55 */
++	{ 0x29, 0x01, 300 },	/* 0x56 */
++	{ 0x52, 0x63,  74 },	/* 0x57 */
++	{ 0xff, 0x00,   0 },	/* 0x58 */
++};
++
++static const u8 xgi_vga_dac[] = {
++	0x00, 0x10, 0x04, 0x14, 0x01, 0x11, 0x09, 0x15,
++	0x2a, 0x3a, 0x2e, 0x3e, 0x2b, 0x3b, 0x2f, 0x3f,
++	0x00, 0x05, 0x08, 0x0b, 0x0e, 0x11, 0x14, 0x18,
++	0x1c, 0x20, 0x24, 0x28, 0x2d, 0x32, 0x38, 0x3f,
++	0x00, 0x10, 0x1f, 0x2f, 0x3f, 0x1f, 0x27, 0x2f,
++	0x37, 0x3f, 0x2d, 0x31, 0x36, 0x3a, 0x3f, 0x00,
++	0x07, 0x0e, 0x15, 0x1c, 0x0e, 0x11, 0x15, 0x18,
++	0x1c, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x00, 0x04,
++	0x08, 0x0c, 0x10, 0x08, 0x0a, 0x0c, 0x0e, 0x10,
++	0x0b, 0x0c, 0x0d, 0x0f, 0x10
++};
++
++static const struct xgi_dram_type xgi_dram_types[] = {
++	{ 128, 0x5d },
++	{  64, 0x59 },
++	{  64, 0x4d },
++	{  32, 0x55 },
++	{  32, 0x49 },
++	{  32, 0x3d },
++	{  16, 0x51 },
++	{  16, 0x45 },
++	{  16, 0x39 },
++	{   8, 0x41 },
++	{   8, 0x35 },
++	{   4, 0x31 },
++};
++
++static const struct xgi_rate xgi_rates[] = {
++	{  640,  480,  60, 1 },
++	{  640,  480,  72, 2 },
++	{  640,  480,  75, 3 },
++	{  640,  480,  85, 4 },
++	{  640,  480, 100, 5 },
++	{  640,  480, 120, 6 },
++	{  640,  480, 160, 7 },
++	{  640,  480, 200, 8 },
++	{  720,  480,  60, 1 },
++	{  720,  576,  58, 1 },
++	{  800,  480,  60, 1 },
++	{  800,  480,  75, 2 },
++	{  800,  480,  85, 3 },
++	{  800,  600,  60, 1 },
++	{  800,  600,  72, 2 },
++	{  800,  600,  75, 3 },
++	{  800,  600,  85, 4 },
++	{  800,  600, 100, 5 },
++	{  800,  600, 120, 6 },
++	{  800,  600, 160, 7 },
++	{ 1024,  768,  60, 1 },
++	{ 1024,  768,  70, 2 },
++	{ 1024,  768,  75, 3 },
++	{ 1024,  768,  85, 4 },
++	{ 1024,  768, 100, 5 },
++	{ 1024,  768, 120, 6 },
++	{ 1024,  576,  60, 1 },
++	{ 1024,  576,  75, 2 },
++	{ 1024,  576,  85, 3 },
++	{ 1024,  600,  60, 1 },
++	{ 1152,  768,  60, 1 },
++	{ 1280,  720,  60, 1 },
++	{ 1280,  720,  75, 2 },
++	{ 1280,  720,  85, 3 },
++	{ 1280,  768,  60, 1 },
++	{ 1280, 1024,  60, 1 },
++	{ 1280, 1024,  75, 2 },
++	{ 1280, 1024,  85, 3 },
++	{ 1280,  960,  70, 1 },
++	{ 1400, 1050,  60, 1 },
++	{ 1600, 1200,  60, 1 },
++	{ 1600, 1200,  65, 2 },
++	{ 1600, 1200,  70, 3 },
++	{ 1600, 1200,  75, 4 },
++	{ 1600, 1200,  85, 5 },
++	{ 1600, 1200, 100, 6 },
++	{ 1600, 1200, 120, 7 },
++	{ 1920, 1440,  60, 1 },
++	{ 1920, 1440,  65, 2 },
++	{ 1920, 1440,  70, 3 },
++	{ 1920, 1440,  75, 4 },
++	{ 1920, 1440,  85, 5 },
++	{ 1920, 1440, 100, 6 },
++	{ 2048, 1536,  60, 1 },
++	{ 2048, 1536,  65, 2 },
++	{ 2048, 1536,  70, 3 },
++	{ 2048, 1536,  75, 4 },
++	{ 2048, 1536,  85, 5 },
++};
++
++#endif /* __XGI_TABLES_H */
+diff --git a/include/configs/wtplug_tc.h b/include/configs/wtplug_tc.h
+new file mode 100644
+index 00000000000..527a7960220
+--- /dev/null
++++ b/include/configs/wtplug_tc.h
+@@ -0,0 +1,8 @@
++/* SPDX-License-Identifier: GPL-2.0+ */
++
++#ifndef _CONFIG_WTPLUG_TC_H
++#define _CONFIG_WTPLUG_TC_H
++
++#include "mv-common.h"
++
++#endif /* _CONFIG_WTPLUG_TC_H */

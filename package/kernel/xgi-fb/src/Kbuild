@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0
+
+# The kernel is built without fbdev, its core comes from the kernel sources
+# here. FB_DEVICE gives /dev/fb* and must match in both modules.
+ccflags-y += -DCONFIG_FB_DEVICE
+
+obj-m += fb.o xgi-fb.o
+fb-y := fb_info.o fbmem.o fbcmap.o modedb.o fbcvt.o fb_chrdev.o \
+	fb_procfs.o fbsysfs.o fb_io_fops.o fb_stub.o

@@ -5,6 +5,7 @@
 /dl
 /.config
 /.config.old
+/.config.prev
 /.toolchain_build_ver
 /bin
 /build_dir
@@ -13,7 +14,6 @@
 /logs
 /feeds
 /feeds.conf
-/files
 /target/linux/feeds
 /overlay
 /package/feeds
