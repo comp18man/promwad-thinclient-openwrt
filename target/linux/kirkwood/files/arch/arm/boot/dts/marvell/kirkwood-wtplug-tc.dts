@@ -220,14 +220,15 @@
 };
 
 /*
- * No reset-gpios: U-Boot has set up the GPU for xgi-fb, and a reset here
- * would lose the mode. PERST of pcie0 is GPIO13, GPU_RESET is GPIO38.
+ * No reset-gpios: U-Boot has set up the GPU for xgi-fb, and a reset by
+ * GPU_RESET (GPIO38) would lose the mode.
  */
 &pcie0 {
 	status = "okay";
 };
 
 &pcie1 {
+	reset-gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 

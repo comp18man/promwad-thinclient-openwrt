@@ -18,31 +18,25 @@ index 37d3b6fd3cc..c37fd7d401c 100644
  	bubblegum_96.dtb
 diff --git a/arch/arm/dts/kirkwood-wtplug-tc-u-boot.dtsi b/arch/arm/dts/kirkwood-wtplug-tc-u-boot.dtsi
 new file mode 100644
-index 00000000000..452606404aa
+index 00000000000..314350b7433
 --- /dev/null
 +++ b/arch/arm/dts/kirkwood-wtplug-tc-u-boot.dtsi
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,9 @@
 +// SPDX-License-Identifier: GPL-2.0+
 +
-+#include <dt-bindings/gpio/gpio.h>
-+
-+/* ft_board_setup() undoes both changes in the tree handed to the kernel */
-+
-+/* PERST resets the GPU before the video POST */
-+&pcie0 {
-+	reset-gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
-+};
-+
-+/* Kirkwood U-Boot sets up MBus windows for the first PCIe port only */
++/*
++ * Kirkwood U-Boot sets up MBus windows for the first PCIe port only,
++ * ft_board_setup() enables pcie1 again in the tree handed to the kernel
++ */
 +&pcie1 {
 +	status = "disabled";
 +};
 diff --git a/arch/arm/dts/kirkwood-wtplug-tc.dts b/arch/arm/dts/kirkwood-wtplug-tc.dts
 new file mode 100644
-index 00000000000..a74d61a36e5
+index 00000000000..bc4990f1e88
 --- /dev/null
 +++ b/arch/arm/dts/kirkwood-wtplug-tc.dts
-@@ -0,0 +1,236 @@
+@@ -0,0 +1,237 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Device Tree file for Promwad WTPlug Thin Client Board
@@ -265,14 +259,15 @@ index 00000000000..a74d61a36e5
 +};
 +
 +/*
-+ * No reset-gpios: U-Boot has set up the GPU for xgi-fb, and a reset here
-+ * would lose the mode. PERST of pcie0 is GPIO13, GPU_RESET is GPIO38.
++ * No reset-gpios: U-Boot has set up the GPU for xgi-fb, and a reset by
++ * GPU_RESET (GPIO38) would lose the mode.
 + */
 +&pcie0 {
 +	status = "okay";
 +};
 +
 +&pcie1 {
++	reset-gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
 +	status = "okay";
 +};
 +
@@ -517,10 +512,10 @@ index 00000000000..4c43dbc1c2e
 +DATA 0x0 0x0
 diff --git a/board/promwad/wtplug_tc/wtplug_tc.c b/board/promwad/wtplug_tc/wtplug_tc.c
 new file mode 100644
-index 00000000000..4cf1f160646
+index 00000000000..e350baed405
 --- /dev/null
 +++ b/board/promwad/wtplug_tc/wtplug_tc.c
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,235 @@
 +// SPDX-License-Identifier: GPL-2.0+
 +/*
 + * (C) Copyright 2011
@@ -549,16 +544,19 @@ index 00000000000..4cf1f160646
 +DECLARE_GLOBAL_DATA_PTR;
 +
 +#define GREEN_LED		BIT(7)
++#define PEX0_RST		BIT(13)
 +#define RED_LED			BIT(17)
 +#define GPU_RESET		BIT(38 - 32)
 +#define USB_HS_IND		BIT(46 - 32)
 +#define RST_GE			BIT(47 - 32)
 +#define RST_USB			BIT(48 - 32)
 +
-+#define WTPLUG_TC_OE_LOW	(~(GREEN_LED | RED_LED))
++#define WTPLUG_TC_OE_LOW	(~(GREEN_LED | PEX0_RST | RED_LED))
 +#define WTPLUG_TC_OE_HIGH	(~(GPU_RESET | RST_GE | RST_USB))
-+#define WTPLUG_TC_OE_VAL_LOW	GREEN_LED
++#define WTPLUG_TC_OE_VAL_LOW	(GREEN_LED | PEX0_RST)
 +#define WTPLUG_TC_OE_VAL_HIGH	RST_GE
++
++#define PEX1_EN			BIT(4)
 +
 +#define MV88E1121_PAGE		22
 +#define MV88E1121_MAC_CTRL2	21
@@ -566,6 +564,8 @@ index 00000000000..4cf1f160646
 +
 +int board_early_init_f(void)
 +{
++	struct kwcpu_registers *cpu =
++		(struct kwcpu_registers *)KW_CPU_REG_BASE;
 +	static const u32 kwmpp_config[] = {
 +		MPP0_NF_IO2,
 +		MPP1_NF_IO3,
@@ -580,7 +580,7 @@ index 00000000000..4cf1f160646
 +		MPP10_UART0_TXD,
 +		MPP11_UART0_RXD,
 +		MPP12_GPO,
-+		MPP13_GPIO,		/* PEX0_RST */
++		MPP13_GPIO,		/* PEX0_RST: PERST# of mini PCIe on PCIe1 */
 +		MPP14_GPIO,		/* WLAN_DIS */
 +		MPP15_GPIO,
 +		MPP16_GPIO,
@@ -623,6 +623,9 @@ index 00000000000..4cf1f160646
 +	mvebu_config_gpio(WTPLUG_TC_OE_VAL_LOW, WTPLUG_TC_OE_VAL_HIGH,
 +			  WTPLUG_TC_OE_LOW, WTPLUG_TC_OE_HIGH);
 +	kirkwood_mpp_conf(kwmpp_config, NULL);
++
++	/* Neither arch code nor Linux enables PCIe port 1 */
++	setbits_le32(&cpu->ctrl_stat, PEX1_EN);
 +
 +	return 0;
 +}
@@ -736,16 +739,11 @@ index 00000000000..4cf1f160646
 +
 +/*
 + * Give the kernel the board DTS without kirkwood-wtplug-tc-u-boot.dtsi:
-+ * PERST would lose the GPU mode set up for xgi-fb, and Linux maps MBus
-+ * windows for both PCIe ports itself.
++ * Linux maps MBus windows for both PCIe ports itself.
 + */
 +int ft_board_setup(void *blob, struct bd_info *bd)
 +{
 +	int node;
-+
-+	node = fdt_path_offset(blob, "/mbus@f1000000/pcie@82000000/pcie@1,0");
-+	if (node >= 0)
-+		fdt_delprop(blob, node, "reset-gpios");
 +
 +	node = fdt_path_offset(blob, "/mbus@f1000000/pcie@82000000/pcie@2,0");
 +	if (node < 0)
